@@ -113,40 +113,18 @@ while true; do
     touch "$POWERFAIL_FILE"
 
     # -------------------
-    # Фаза 1: не-критичные VM/LXC
+    # Фаза 1: XPEnology (VM 100) — выключается первой, с неё NFS
+    # Остальные VM/CT монтируют NFS с XPEnology, поэтому НЕЛЬЗЯ
+    # выключать их до того как XPEnology встала
     # -------------------
-    log "Phase 1/4: Shutting down non-critical VMs and containers..."
+    log "Phase 1/4: Waiting for Xpenology (VM $XPENOLOGY_VMID) to shut down..."
 
     if $DRY_RUN; then
-        log "[DRY-RUN] Would shut down VMs (except $XPENOLOGY_VMID):"
-        qm list 2>/dev/null | awk -v skip="$XPENOLOGY_VMID" 'NR>1 && $1!=skip && $3=="running" {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
-        log "[DRY-RUN] Would shut down containers:"
-        pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
-    else
-        for vmid in $(qm list 2>/dev/null | awk -v skip="$XPENOLOGY_VMID" 'NR>1 && $1!=skip && $3=="running" {print $1}'); do
-            log "  Shutting down VM $vmid..."
-            qm shutdown "$vmid" --timeout 60 &
-        done
-        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}'); do
-            log "  Shutting down CT $ctid..."
-            pct shutdown "$ctid" --timeout 30 &
-        done
-        wait
-        log "Phase 1 complete."
-    fi
-
-    # -------------------
-    # Фаза 2: xpenology (VM 100)
-    # -------------------
-    log "Phase 2/4: Shutting down Xpenology (VM $XPENOLOGY_VMID)..."
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would execute: qm shutdown $XPENOLOGY_VMID --timeout 120"
+        log "[DRY-RUN] Xpenology (VM $XPENOLOGY_VMID) shuts down FIRST (its own powerfail script)"
         log "[DRY-RUN] Would wait up to ${SHUTDOWN_TIMEOUT}s for VM $XPENOLOGY_VMID to stop"
         log "[DRY-RUN] Xpenology shutdown SIMULATED (status=stopped)"
     else
-        qm shutdown "$XPENOLOGY_VMID" --timeout 120
-
+        # XPEnology уже запустила свой скрипт — ждём когда она выключится
         waited=0
         while [ "$waited" -lt "$SHUTDOWN_TIMEOUT" ]; do
             status=$(qm status "$XPENOLOGY_VMID" 2>/dev/null | awk '{print $2}')
@@ -163,6 +141,29 @@ while true; do
             qm stop "$XPENOLOGY_VMID"
             sleep 5
         fi
+    fi
+
+    # -------------------
+    # Фаза 2: остальные VM и LXC (NFS уже неактивна)
+    # -------------------
+    log "Phase 2/4: Shutting down remaining VMs and containers..."
+
+    if $DRY_RUN; then
+        log "[DRY-RUN] Would shut down VMs:"
+        qm list 2>/dev/null | awk 'NR>1 && $3=="running" {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
+        log "[DRY-RUN] Would shut down containers:"
+        pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
+    else
+        for vmid in $(qm list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}'); do
+            log "  Shutting down VM $vmid..."
+            qm shutdown "$vmid" --timeout 60 &
+        done
+        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}'); do
+            log "  Shutting down CT $ctid..."
+            pct shutdown "$ctid" --timeout 30 &
+        done
+        wait
+        log "Phase 2 complete."
     fi
 
     # -------------------

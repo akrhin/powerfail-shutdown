@@ -16,8 +16,8 @@ APC Back-UPS ES 400, без USB/сеть, ~60 Вт нагрузка.
   ├── [PROXMOX] powerfail-proxmox.sh (основной, systemd)
   │   ├── пинг роутера каждые 30 сек
   │   ├── 3 провала → shutdown sequence:
-  │   │   1. Гасит всё, кроме xpenology (VM 101+)
-  │   │   2. Гасит xpenology (VM 100) и ждёт stopped
+  │   │   1. Ждёт пока Xpenology (VM 100) выключится (свой скрипт)
+  │   │   2. Гасит остальные VM и LXC (NFS уже неактивна)
   │   │   3. Force-stop остатков
   │   │   4. shutdown -h now
   │   └── Время: ~3-5 мин, ИБП держит ~30 мин
