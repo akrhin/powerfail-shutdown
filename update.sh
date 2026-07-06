@@ -25,29 +25,22 @@ echo ""
 
 [ "$(id -u)" -ne 0 ] && { err "Запусти от root."; exit 1; }
 
-# Определяем загрузчик
-DL_BIN=""
+DL=""
 if command -v wget &>/dev/null; then
-    DL_BIN="wget"
-    DL_CMD="wget --retry-connrefused --timeout=15 -q -O"
+    DL="wget --retry-connrefused --timeout=15 -q -O"
 elif command -v curl &>/dev/null; then
-    DL_BIN="curl"
-    DL_CMD="curl -sL --connect-timeout 15 --max-time 30 --retry 3 -o"
+    DL="curl -sL --connect-timeout 15 --max-time 30 --retry 3 -o"
 else
     err "Ни wget, ни curl не найдены"
     exit 1
 fi
 
-# Функция загрузки с повторными попытками
-_download() {
-    local src="$1" dst="$2" attempt=1 max=3
-    while [ $attempt -le $max ]; do
-        if $DL_CMD "$dst" "$RAW/$src" 2>/dev/null; then
-            [ -s "$dst" ] && return 0
-        fi
-        warn "Попытка $attempt/$max — $src не скачался, жду 3 сек..."
-        sleep 3
-        attempt=$((attempt + 1))
+_dl() {
+    local src="$1" dst="$2" i
+    for i in 1 2 3; do
+        $DL "$dst" "$RAW/$src" 2>/dev/null
+        [ -s "$dst" ] && return 0
+        [ $i -lt 3 ] && sleep 2
     done
     return 1
 }
@@ -59,47 +52,54 @@ if [ -f "$BIN_DIR/$SCRIPT" ]; then
     ok "Резервная копия: $BACKUP"
 fi
 
-# --- Скачивание с ретраями ---
-ANY_FAIL=false
-for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER" "powerfail.conf.example:$SERVICE_DIR/powerfail.conf.example"; do
-    src="${pair%%:*}"
-    dst="${pair##*:}"
-    if _download "$src" "$dst"; then
-        chmod +x "$dst" 2>/dev/null
-        ok "$dst"
-    else
-        err "Не удалось скачать $src после 3 попыток"
-        ANY_FAIL=true
-    fi
-done
-
-# Если скрипт не скачался — откат
-if [ ! -f "$BIN_DIR/$SCRIPT" ] || [ ! -s "$BIN_DIR/$SCRIPT" ]; then
-    if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
-        cp "$BACKUP" "$BIN_DIR/$SCRIPT"
-        warn "Восстановлен из резервной копии"
-        $ANY_FAIL && ok "Остальные файлы не критичны — сервис работает на старой версии"
-    fi
+# --- Скачивание ---
+if _dl "$SCRIPT" "$BIN_DIR/$SCRIPT"; then
+    chmod +x "$BIN_DIR/$SCRIPT"
+    ok "скрипт"
+else
+    err "Не удалось скачать $SCRIPT"
+    [ -n "$BACKUP" ] && cp "$BACKUP" "$BIN_DIR/$SCRIPT" && ok "откат"
+    exit 1
 fi
 
-# --- Конфиг (если не существует) ---
+_dl "$SERVICE" "$SERVICE_DIR/$SERVICE" && ok "service" || warn "service не обновлён"
+
+if _dl "$TIMER" "$SERVICE_DIR/$TIMER"; then
+    ok "timer"
+else
+    warn "timer не скачался, создаю встроенный"
+    cat > "$SERVICE_DIR/$TIMER" << 'TIMEREOF'
+[Unit]
+Description=UPS Power Failure Monitor (check router every 30s)
+Requires=powerfail-proxmox.service
+
+[Timer]
+OnCalendar=*-*-* *:*:0/30
+Persistent=false
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target
+TIMEREOF
+    ok "timer (встроенный)"
+fi
+
+_dl "powerfail.conf.example" "$SERVICE_DIR/powerfail.conf.example" || true
+
+# --- Конфиг ---
 if [ ! -f "$CONFIG_DIR/powerfail.conf" ]; then
     mkdir -p "$CONFIG_DIR"
-    cp "$SERVICE_DIR/powerfail.conf.example" "$CONFIG_DIR/powerfail.conf" 2>/dev/null
+    [ -f "$SERVICE_DIR/powerfail.conf.example" ] && cp "$SERVICE_DIR/powerfail.conf.example" "$CONFIG_DIR/powerfail.conf"
     chmod 600 "$CONFIG_DIR/powerfail.conf" 2>/dev/null
-    ok "Создан $CONFIG_DIR/powerfail.conf"
+    ok "создан /etc/powerfail/powerfail.conf"
 fi
 
 # --- Применение ---
 systemctl daemon-reload
-if systemctl is-active "$SERVICE" &>/dev/null; then
-    systemctl stop "$SERVICE"
-    systemctl disable "$SERVICE" 2>/dev/null
-fi
+systemctl stop "$SERVICE" 2>/dev/null
+systemctl disable "$SERVICE" 2>/dev/null
 
-if ! systemctl is-enabled "$TIMER" &>/dev/null; then
-    systemctl enable "$TIMER"
-fi
+systemctl enable "$TIMER" 2>/dev/null
 systemctl restart "$TIMER" 2>/dev/null
 sleep 1
 
@@ -111,7 +111,7 @@ fi
 
 echo ""
 echo "============================================"
-echo "  Обновление завершено!"
+echo "  Готово!"
 echo "============================================"
 echo ""
 echo "  systemctl status $TIMER"
