@@ -1,14 +1,6 @@
 [Unit]
-Description=UPS Power Failure Monitor
-After=network.target
+Description=UPS Power Failure Check
 
 [Service]
-Type=simple
+Type=oneshot
 ExecStart=/usr/local/bin/powerfail-proxmox.sh
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

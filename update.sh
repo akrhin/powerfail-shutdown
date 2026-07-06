@@ -1,25 +1,20 @@
 #!/bin/bash
-# ==============================================================
-# Update powerfail-proxmox.sh на Proxmox хосте из GitHub
+# Update powerfail-proxmox.sh from GitHub
 # Usage: bash update.sh
-# ==============================================================
 
-RAW_BASE="https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main"
+RAW="https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main"
 
 BIN_DIR="/usr/local/bin"
 SERVICE_DIR="/etc/systemd/system"
 
 SCRIPT="powerfail-proxmox.sh"
 SERVICE="powerfail-proxmox.service"
+TIMER="powerfail-proxmox.timer"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-ok()  { echo -e "  ${GREEN}✅${NC} $1"; }
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+ok(){ echo -e "  ${GREEN}✅${NC} $1"; }
 warn(){ echo -e "  ${YELLOW}⚠️ $1${NC}"; }
-err() { echo -e "  ${RED}❌${NC} $1"; }
+err(){ echo -e "  ${RED}❌${NC} $1"; }
 
 echo ""
 echo "============================================"
@@ -27,71 +22,52 @@ echo "  powerfail-shutdown — обновление"
 echo "============================================"
 echo ""
 
-if [ "$(id -u)" -ne 0 ]; then
-    err "Запусти от root."
-    exit 1
-fi
+[ "$(id -u)" -ne 0 ] && { err "Запусти от root."; exit 1; }
 
-# --- Резервное копирование ---
+# --- Резервная копия ---
 if [ -f "$BIN_DIR/$SCRIPT" ]; then
     BACKUP="$BIN_DIR/$SCRIPT.bak.$(date +%Y%m%d%H%M%S)"
     cp "$BIN_DIR/$SCRIPT" "$BACKUP"
-    ok "Сохранена резервная копия: $BACKUP"
-else
-    warn "Текущий скрипт не найден в $BIN_DIR. Будет выполнена чистая установка."
+    ok "Резервная копия: $BACKUP"
 fi
 
-# --- Скачивание скрипта ---
-echo "📥 Скачиваю $SCRIPT..."
-if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW_BASE/$SCRIPT" -o "$BIN_DIR/$SCRIPT"; then
-    err "Не удалось скачать $SCRIPT"
-    if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
-        cp "$BACKUP" "$BIN_DIR/$SCRIPT"
-        ok "Откат до резервной копии"
+# --- Скачивание ---
+for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER"; do
+    src="${pair%%:*}"
+    dst="${pair##*:}"
+    if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW/$src" -o "$dst"; then
+        err "Не удалось скачать $src"
+        if [ -n "$BACKUP" ] && [ "$src" = "$SCRIPT" ]; then
+            cp "$BACKUP" "$BIN_DIR/$SCRIPT"
+            ok "Откат до резервной копии"
+        fi
+        exit 1
     fi
-    exit 1
-fi
-chmod +x "$BIN_DIR/$SCRIPT"
-ok "Скрипт обновлён"
-
-# --- Скачивание systemd unit ---
-echo "📥 Скачиваю $SERVICE..."
-if curl -sL --connect-timeout 10 --max-time 15 "$RAW_BASE/$SERVICE" -o "$SERVICE_DIR/$SERVICE" 2>/dev/null; then
-    ok "Unit обновлён"
-else
-    warn "Unit не скачался (возможно, не изменился на GitHub)"
-fi
+    chmod +x "$dst" 2>/dev/null
+    ok "$dst"
+done
 
 # --- Применение ---
 systemctl daemon-reload
 
+# Если был старый сервис (Type=simple) — глушим и переключаем на timer
 if systemctl is-active "$SERVICE" &>/dev/null; then
-    echo "🔄 Перезапускаю сервис..."
-    systemctl restart "$SERVICE" 2>/dev/null &
-    sleep 2
+    systemctl stop "$SERVICE"
+    systemctl disable "$SERVICE" 2>/dev/null
+fi
 
-    if systemctl is-active "$SERVICE" &>/dev/null; then
-        ok "Сервис перезапущен и работает"
-    else
-        err "Сервис не запустился после обновления."
-        if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
-            echo "   Откатываю..."
-            cp "$BACKUP" "$BIN_DIR/$SCRIPT"
-            chmod +x "$BIN_DIR/$SCRIPT"
-            systemctl restart "$SERVICE" 2>/dev/null &
-            sleep 2
-            if systemctl is-active "$SERVICE" &>/dev/null; then
-                ok "Откат выполнен, сервис работает"
-            fi
-        fi
-    fi
+# Включаем timer если ещё не включён
+if ! systemctl is-enabled "$TIMER" &>/dev/null; then
+    systemctl enable "$TIMER"
+fi
+systemctl restart "$TIMER" 2>/dev/null
+
+sleep 1
+
+if systemctl is-active "$TIMER" &>/dev/null; then
+    ok "Таймер работает"
 else
-    warn "Сервис не был запущен. Запускаю..."
-    systemctl start "$SERVICE" 2>/dev/null &
-    sleep 2
-    if systemctl is-active "$SERVICE" &>/dev/null; then
-        ok "Сервис запущен"
-    fi
+    err "Таймер не запустился"
 fi
 
 echo ""
@@ -99,7 +75,8 @@ echo "============================================"
 echo "  Обновление завершено!"
 echo "============================================"
 echo ""
-echo "  Текущая версия: $(head -5 "$BIN_DIR/$SCRIPT" | grep -iE 'версия|version' | head -1)"
+echo "  Таймер:"
+echo "    systemctl status $TIMER"
 echo ""
 echo "  Логи:"
 echo "    journalctl -u $SERVICE -f"

@@ -1,0 +1,11 @@
+[Unit]
+Description=UPS Power Failure Monitor (check router every 30s)
+Requires=powerfail-proxmox.service
+
+[Timer]
+OnCalendar=*-*-* *:*:0/30
+Persistent=false
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target
