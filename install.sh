@@ -1,11 +1,8 @@
 #!/bin/bash
 # ==============================================================
 # Install powerfail-proxmox.sh on Proxmox host
-# Usage: curl -sL https://git.io/... | bash
-#    or: bash install.sh
+# Usage: bash <(curl -sL https://git.io/...)
 # ==============================================================
-
-set -e
 
 REPO="https://github.com/akrhin/powerfail-shutdown"
 RAW_BASE="https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main"
@@ -19,7 +16,7 @@ SERVICE="powerfail-proxmox.service"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 ok()  { echo -e "  ${GREEN}✅${NC} $1"; }
 warn(){ echo -e "  ${YELLOW}⚠️ $1${NC}"; }
@@ -31,20 +28,21 @@ echo "  powerfail-shutdown — установка на Proxmox"
 echo "============================================"
 echo ""
 
-# --- Проверка: запущен ли скрипт на Proxmox ---
+# --- Проверка: root ---
+if [ "$(id -u)" -ne 0 ]; then
+    err "Запусти от root (на Proxmox всё под root)"
+    exit 1
+fi
+
+# --- Проверка: Proxmox ---
 if ! command -v qm &>/dev/null || ! command -v pct &>/dev/null; then
     err "Это не Proxmox (qm/pct не найдены). Установка прервана."
     exit 1
 fi
 
-if [ "$(id -u)" -ne 0 ]; then
-    err "Запусти от root: sudo bash install.sh"
-    exit 1
-fi
-
 # --- Скачивание скрипта ---
 echo "📥 Скачиваю $SCRIPT..."
-if ! curl -sL "$RAW_BASE/$SCRIPT" -o "$BIN_DIR/$SCRIPT"; then
+if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW_BASE/$SCRIPT" -o "$BIN_DIR/$SCRIPT"; then
     err "Не удалось скачать $SCRIPT"
     exit 1
 fi
@@ -53,13 +51,13 @@ ok "Скрипт установлен: $BIN_DIR/$SCRIPT"
 
 # --- Скачивание systemd unit ---
 echo "📥 Скачиваю $SERVICE..."
-if ! curl -sL "$RAW_BASE/$SERVICE" -o "$SERVICE_DIR/$SERVICE"; then
+if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW_BASE/$SERVICE" -o "$SERVICE_DIR/$SERVICE"; then
     err "Не удалось скачать $SERVICE"
     exit 1
 fi
 ok "Unit установлен: $SERVICE_DIR/$SERVICE"
 
-# --- Настройка параметров ---
+# --- Параметры ---
 echo ""
 echo "⚙️  Параметры по умолчанию:"
 echo "   ROUTER       = 192.168.1.1  (роутер НЕ в ИБП)"
@@ -83,19 +81,24 @@ fi
 
 if systemctl is-active "$SERVICE" &>/dev/null; then
     warn "Сервис уже запущен. Перезапускаю..."
-    systemctl restart "$SERVICE"
-    ok "Сервис перезапущен"
+    systemctl restart "$SERVICE" 2>/dev/null &
+    sleep 2
+    if systemctl is-active "$SERVICE" &>/dev/null; then
+        ok "Сервис перезапущен"
+    fi
 else
-    systemctl start "$SERVICE"
-    ok "Сервис запущен"
+    systemctl start "$SERVICE" 2>/dev/null &
+    sleep 2
+    if systemctl is-active "$SERVICE" &>/dev/null; then
+        ok "Сервис запущен"
+    fi
 fi
 
-# --- Проверка ---
-sleep 1
+# --- Финальная проверка ---
 if systemctl is-active "$SERVICE" &>/dev/null; then
     ok "Сервис работает: $(systemctl is-active "$SERVICE")"
 else
-    err "Сервис не запустился. Лог: journalctl -u $SERVICE -n 20 --no-pager"
+    err "Сервис не запустился. Проверь лог: journalctl -u $SERVICE -n 20 --no-pager"
 fi
 
 echo ""

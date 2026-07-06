@@ -37,7 +37,7 @@ APC Back-UPS ES 400, без USB/сеть, ~60 Вт нагрузка.
 ### Быстрая установка (одной командой)
 
 ```bash
-sudo bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/install.sh)
+bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/install.sh)
 ```
 
 ### Или вручную
@@ -95,7 +95,7 @@ systemctl status powerfail-proxmox.service
 ## Обновление
 
 ```bash
-sudo bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/update.sh)
+bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/update.sh)
 ```
 
 Скрипт сохранит резервную копию текущей версии, скачает свежую из GitHub и перезапустит сервис.
