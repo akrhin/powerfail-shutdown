@@ -109,7 +109,7 @@ if $TEST_MODE; then
     qm list 2>/dev/null | awk 'NR==1 || $3=="running" {printf "  %-5s %-30s %s\n", $1, $2, $3}'
     echo ""
     echo "Running CTs:"
-    pct list 2>/dev/null | awk 'NR==1 || $3=="running" {printf "  %-5s %-30s %s\n", $1, $2, $3}'
+    pct list 2>/dev/null | awk 'NR==1{printf "  %-5s %-10s\n", $1, $2} NR>1{printf "  %-5s %-10s\n", $1, $2}'
     echo ""
     echo "Test complete. Use --dry-run for a full shutdown simulation."
     exit 0
@@ -150,33 +150,33 @@ while true; do
     touch "$POWERFAIL_FILE"
 
     # -------------------
-    # Фаза 1: CT 107 (FS)
+    # Фаза 1: FS CT (выключается первым, перед Xpenology/NFS)
     # -------------------
     log "Phase 1/5: Shutting down CT $FSCT_VMID (FS)..."
     _pct_stop "$FSCT_VMID"
 
     # -------------------
-    # Фаза 2: XPEnology (VM 100) — с неё NFS
+    # Фаза 2: Xpenology (VM 100) — NFS-сервер
     # -------------------
     log "Phase 2/5: Shutting down Xpenology (VM $XPENOLOGY_VMID)..."
     _qm_stop "$XPENOLOGY_VMID"
 
     # -------------------
-    # Фаза 3: остальные VM и LXC
+    # Фаза 3: остальные VM и LXC (NFS уже неактивна)
     # -------------------
     log "Phase 3/5: Shutting down remaining VMs and containers..."
 
     if $DRY_RUN; then
         log "[DRY-RUN] Would shut down remaining VMs:"
-        qm list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$XPENOLOGY_VMID"' {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
+        qm list 2>/dev/null | awk -v skip="$XPENOLOGY_VMID" 'NR>1 && $3=="running" && $1+0!=skip {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
         log "[DRY-RUN] Would shut down remaining CTs:"
-        pct list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$FSCT_VMID"' {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
+        pct list 2>/dev/null | awk -v skip="$FSCT_VMID" 'NR>1 && $2=="running" && $1+0!=skip {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
     else
-        for vmid in $(qm list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$XPENOLOGY_VMID"' {print $1}'); do
+        for vmid in $(qm list 2>/dev/null | awk -v skip="$XPENOLOGY_VMID" 'NR>1 && $3=="running" && $1+0!=skip {print $1}'); do
             log "  Shutting down VM $vmid..."
             qm shutdown "$vmid" --timeout 60 &
         done
-        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$FSCT_VMID"' {print $1}'); do
+        for ctid in $(pct list 2>/dev/null | awk -v skip="$FSCT_VMID" 'NR>1 && $2=="running" && $1+0!=skip {print $1}'); do
             log "  Shutting down CT $ctid..."
             pct shutdown "$ctid" --timeout 30 &
         done
@@ -185,7 +185,7 @@ while true; do
     $DRY_RUN || log "Phase 3 complete."
 
     # -------------------
-    # Фаза 4: финальная проверка
+    # Фаза 4: финальная проверка — добиваем зависшие
     # -------------------
     log "Phase 4/5: Final check — force-stop any remaining VMs/CTs..."
 
@@ -196,7 +196,7 @@ while true; do
             log "  Force stopping VM $vmid..."
             qm stop "$vmid" 2>/dev/null
         done
-        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3!="stopped" {print $1}'); do
+        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $2!="stopped" {print $1}'); do
             log "  Force stopping CT $ctid..."
             pct stop "$ctid" 2>/dev/null
         done
