@@ -41,6 +41,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --debug)   DEBUG=true ;;
         test-network) TEST_MODE=true ;;
+        --test-telegram) TEST_TELEGRAM=true ;;
     esac
 done
 
@@ -133,6 +134,18 @@ if [ "${TEST_MODE:-false}" = true ]; then
     fi
     echo ""
     echo "Test complete."
+    exit 0
+fi
+
+# === Режим test-telegram ===
+if [ "${TEST_TELEGRAM:-false}" = true ]; then
+    if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+        echo "❌ Telegram не настроен. Заполни /etc/powerfail/powerfail.conf"
+        exit 1
+    fi
+    echo "📨 Отправляю тестовое сообщение в Telegram..."
+    _tg_send "✅ Тест — powerfail-shutdown работает. Роутер ${ROUTER} в норме."
+    echo "✅ Отправлено. Проверь Telegram."
     exit 0
 fi
 
