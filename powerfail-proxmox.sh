@@ -17,12 +17,17 @@ FSCT_VMID="${FSCT_VMID:-107}"
 SHUTDOWN_TIMEOUT="${SHUTDOWN_TIMEOUT:-600}"
 LOG_TAG="POWERFAIL"
 
-# Telegram (опционально — подключить через EnvironmentFile)
-# Создай /etc/powerfail/powerfail.conf:
+# Telegram (опционально)
+# Настройки: /etc/powerfail/powerfail.conf
 #   TG_BOT_TOKEN="123456:ABC-DEF..."
 #   TG_CHAT_ID="123456789"
 TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
 TG_CHAT_ID="${TG_CHAT_ID:-}"
+
+# Если при ручном запуске переменные пустые — читаем из файла конфига
+if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+    [ -f "/etc/powerfail/powerfail.conf" ] && source "/etc/powerfail/powerfail.conf"
+fi
 
 COUNTER_FILE="${COUNTER_FILE:-/tmp/powerfail_proxmox_counter}"
 POWERFAIL_FILE="${POWERFAIL_FILE:-/tmp/.powerfail_active}"
