@@ -61,10 +61,11 @@ _tg_send() {
         return 0
     fi
     local ts=$(date '+%Y-%m-%d %H:%M:%S')
-    local payload="chat_id=${TG_CHAT_ID}&text=[${ts}]%20${msg}&disable_web_page_preview=1"
     curl -s -o /dev/null --connect-timeout 10 --max-time 15 -k \
-        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -d "$payload" || log "WARN: failed to send Telegram notification (curl exit $?)"
+        -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        -d "{\"chat_id\":${TG_CHAT_ID},\"text\":\"[${ts}] ${msg}\",\"disable_web_page_preview\":true}" \
+        || log "WARN: telegram sendMessage failed (chat=$TG_CHAT_ID)"
 }
 
 _pct_stop() {
@@ -150,13 +151,16 @@ if [ "${TEST_TELEGRAM:-false}" = true ]; then
     echo "   bot_token: ${TG_BOT_TOKEN:0:8}...${TG_BOT_TOKEN: -4}"
     echo "   chat_id: $TG_CHAT_ID"
     _ts="$(date '+%Y-%m-%d %H:%M:%S')"
-    _payload="chat_id=${TG_CHAT_ID}&text=[${_ts}]%20✅%20Тест%20—%20powerfail-shutdown%20работает.&disable_web_page_preview=1"
-    _response="$(curl -s --connect-timeout 10 --max-time 15 -k \
-        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -d "$_payload" 2>&1)"
+    _http_code="$(curl -s -o /tmp/powerfail_tg_test.json -w '%{http_code}' \
+        --connect-timeout 10 --max-time 15 -k \
+        -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        -d "{\"chat_id\":${TG_CHAT_ID},\"text\":\"[${_ts}] ✅ Тест — powerfail-shutdown работает.\",\"disable_web_page_preview\":true}" 2>&1)"
+    _response="$(cat /tmp/powerfail_tg_test.json 2>/dev/null || echo 'no response file')"
+    rm -f /tmp/powerfail_tg_test.json 2>/dev/null
     echo ""
-    echo "📩 Ответ Telegram API:"
-    echo "$_response" | head -5
+    echo "📩 HTTP статус: $_http_code"
+    echo "📩 Ответ: $_response"
     if echo "$_response" | grep -q '"ok":true'; then
         echo ""
         echo "✅ Сообщение отправлено! Проверь Telegram."
