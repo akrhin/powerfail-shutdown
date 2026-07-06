@@ -2,5 +2,13 @@
 # Скопируй этот файл в /etc/powerfail/powerfail.conf и заполни свои данные
 # Этот файл добавлен в .gitignore — не попадёт в репозиторий
 
-# TG_BOT_TOKEN="1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
+# Telegram
+# TG_BOT_TOKEN="***"
 # TG_CHAT_ID="123456789"
+
+# SOCKS5 прокси (опционально — если прямой https://api.telegram.org недоступен)
+# TG_PROXY="socks5h://192.168.1.100:1080"
+
+# Home Assistant — умная розетка для детекции пропажи питания
+# HA_API_URL="http://192.168.1.100:8123/api/states/binary_sensor.athom_wall_outlet_dd4e0a_status"
+# HA_API_TOKEN="***"
