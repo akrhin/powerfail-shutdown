@@ -16,10 +16,11 @@ APC Back-UPS ES 400, без USB/сеть, ~60 Вт нагрузка.
   ├── [PROXMOX] powerfail-proxmox.sh (основной, systemd)
   │   ├── пинг роутера каждые 30 сек
   │   ├── 3 провала → shutdown sequence:
-  │   │   1. Ждёт пока Xpenology (VM 100) выключится (свой скрипт)
-  │   │   2. Гасит остальные VM и LXC (NFS уже неактивна)
-  │   │   3. Force-stop остатков
-  │   │   4. shutdown -h now
+  │   │   1. CT 107 (FS) — pct shutdown
+  │   │   2. VM 100 (Xpenology) — qm shutdown, ждёт stopped
+  │   │   3. Остальные VM и LXC — параллельно
+  │   │   4. Force-stop остатков
+  │   │   5. shutdown -h now
   │   └── Время: ~3-5 мин, ИБП держит ~30 мин
   │
   └── [XPENOLOGY] powerfail-xpenology.sh (резерв, crontab)
@@ -33,42 +34,48 @@ APC Back-UPS ES 400, без USB/сеть, ~60 Вт нагрузка.
 
 ## Установка на Proxmox
 
-### 1. Скопировать скрипты
+### 1. Клонировать репозиторий
 
 ```bash
-# На proxmox хосте
-scp powerfail-proxmox.sh root@proxmox-host:/usr/local/bin/
-scp powerfail-proxmox.service root@proxmox-host:/etc/systemd/system/
+# На proxmox хосте (или любом Linux с доступом по ssh)
+git clone https://github.com/akrhin/powerfail-shutdown.git
+cd powerfail-shutdown
+```
+
+### 2. Скопировать скрипты
+
+```bash
+cp powerfail-proxmox.sh /usr/local/bin/
+cp powerfail-proxmox.service /etc/systemd/system/
 chmod +x /usr/local/bin/powerfail-proxmox.sh
 ```
 
-*(Или скопируй через веб-интерфейс Proxmox в shell)*
+### 3. Настроить параметры (опционально)
 
-### 2. Настроить параметры (опционально)
-
-Отредактируй переменные в начале скрипта:
+Отредактируй переменные в начале `/usr/local/bin/powerfail-proxmox.sh`:
 
 ```bash
-ROUTER="192.168.1.1"        # IP роутера
+ROUTER="192.168.1.1"        # IP роутера (не в ИБП)
 THRESHOLD=3                  # сколько провалов пинга до shutdown
 CHECK_INTERVAL=30            # секунд между проверками
 XPENOLOGY_VMID=100           # ID VM с Xpenology
-SHUTDOWN_TIMEOUT=600         # макс ждать xpenology (сек)
+FSCT_VMID=107                # ID CT с файловым сервером (выключается первым)
+SHUTDOWN_TIMEOUT=600         # макс ждать выключения VM (сек)
 ```
 
-### 3. Запустить как systemd-сервис
+### 4. Запустить как systemd-сервис
 
 ```bash
 systemctl daemon-reload
 systemctl enable powerfail-proxmox.service
 systemctl start powerfail-proxmox.service
-systemctl status powerfail-proxmox.service  # проверить
+systemctl status powerfail-proxmox.service
 ```
 
-### 4. Проверить что работает
+### 5. Проверить что работает
 
 ```bash
-# Режим test-network — однократная проверка связи
+# Режим test-network — однократная проверка связи + список VM/CT
 /usr/local/bin/powerfail-proxmox.sh test-network
 
 # Режим сухого прогона — имитация shutdown без выключения
@@ -79,7 +86,20 @@ systemctl status powerfail-proxmox.service  # проверить
 
 ## Установка на Xpenology (Synology DSM)
 
-### 1. Создать задачу в планировщике
+Xpenology выключается сама (страховочный скрипт), но работает медленнее — раз в 5 минут. Proxmox не ждёт её скрипта, а гасит через qm.
+
+### 1. Клонировать
+
+Через веб-интерфейс DSM — File Station → загрузить файл `powerfail-xpenology.sh`,
+или по ssh:
+
+```bash
+git clone https://github.com/akrhin/powerfail-shutdown.git
+cp powerfail-xpenology.sh /volume1/scripts/
+chmod +x /volume1/scripts/powerfail-xpenology.sh
+```
+
+### 2. Создать задачу в планировщике
 
 - **Панель управления → Планировщик задач → Создать → Запланированная задача → Пользовательский скрипт**
 - **Общие:** Включить, пользователь `root`
@@ -87,21 +107,13 @@ systemctl status powerfail-proxmox.service  # проверить
 - **Настройки задачи — Код:**
 
 ```bash
-# Путь к скрипту (измени если положил в другое место)
 /volume1/scripts/powerfail-xpenology.sh
-```
-
-### 2. Или как скрипт запуска — положить в автозагрузку
-
-```bash
-# Положить скрипт в /usr/local/etc/rc.d/ и chmod +x
-# DSM сам подхватит при старте (но cron надёжнее)
 ```
 
 ### 3. Сначала протестировать
 
 ```bash
-# сухой прогон на время теста
+# сухой прогон (не выключает)
 /volume1/scripts/powerfail-xpenology.sh --dry-run --debug
 ```
 
@@ -122,17 +134,13 @@ systemctl status powerfail-proxmox.service  # проверить
 /usr/local/bin/powerfail-proxmox.sh --dry-run --debug
 # → Вывод: [DRY-RUN] на каждом шаге, реального выключения нет
 
-# 3. Если всё устраивает — удали --dry-run и дай настоящий тест
+# 3. Если всё устраивает — убери --dry-run
 ```
 
 ### На Xpenology:
 
 ```bash
-# 1. Проверка пинга
 /volume1/scripts/powerfail-xpenology.sh --dry-run --debug
-
-# 2. Сделай роутер недоступным
-# Через 3 цикла (15 мин в cron) скрипт скажет "POWER FAILURE — would poweroff"
 ```
 
 ### Поведение счётчика:
@@ -140,6 +148,16 @@ systemctl status powerfail-proxmox.service  # проверить
 Чтобы проверить сценарий «пропало электричество» — выдерни кабель из роутера или выключи его на 2 минуты. Счётчик в `/tmp/powerfail_proxmox_counter` покажет `1`, потом `2`, потом `3` → shutdown.
 
 Если кабель вернуть — счётчик сбросится в `0`.
+
+---
+
+## Порядок выключения
+
+1. **CT 107** (FS) — первым, чтобы корректно размонтировать файловые системы
+2. **VM 100** (Xpenology) — NFS-сервер, выключается перед остальными
+3. **Все остальные VM и LXC** — параллельно (NFS уже неактивна)
+4. **Force-stop** — добиваем зависшие
+5. **Proxmox host** — последним
 
 ---
 
@@ -154,7 +172,6 @@ journalctl -t POWERFAIL
 
 **Xpenology:**
 ```bash
-# Логи в syslog
 cat /var/log/messages | grep POWERFAIL
 ```
 
@@ -177,12 +194,8 @@ cat /var/log/messages | grep POWERFAIL
 2026-07-05 18:01:00 [POWERFAIL] WARN — router 192.168.1.1 unreachable (attempt 2/3)
 2026-07-05 18:01:30 [POWERFAIL] WARN — router 192.168.1.1 unreachable (attempt 3/3)
 2026-07-05 18:01:30 [POWERFAIL] !!! POWER FAILURE DETECTED
-2026-07-05 18:01:30 [POWERFAIL] Phase 1/4: Shutting down non-critical VMs...
-2026-07-05 18:01:30 [POWERFAIL] [DRY-RUN] Would shut down VM 101 (plex)
-2026-07-05 18:01:30 [POWERFAIL] Phase 2/4: Shutting down Xpenology (VM 100)...
-2026-07-05 18:01:30 [POWERFAIL] [DRY-RUN] Xpenology shutdown SIMULATED
-2026-07-05 18:01:30 [POWERFAIL] Phase 4/4: Shutting down Proxmox host...
-2026-07-05 18:01:30 [POWERFAIL] [DRY-RUN] *** SHUTDOWN SIMULATED ***
+2026-07-05 18:01:30 [POWERFAIL] Phase 1/5: Shutting down CT 107 (FS)...
+...
 ```
 
 ---
@@ -191,21 +204,7 @@ cat /var/log/messages | grep POWERFAIL
 
 Если роутер иногда флапает (перезагружается, лаги):
 
-```bash
-# В начале каждого скрипта поправить:
-THRESHOLD=5    # вместо 3 — больше толерантности
-CHECK_INTERVAL=60  # раз в минуту вместо 30 сек
-```
+- `THRESHOLD=5` — больше толерантности
+- `CHECK_INTERVAL=60` — раз в минуту вместо 30 сек
 
 При THRESHOLD=5 и интервале 30 сек — с момента пропажи до shutdown проходит **2.5 минуты**. ИБП держит ~30 минут — запас >10x.
-
----
-
-## Файлы
-
-| Файл | Размер | Назначение |
-|------|--------|-----------|
-| `powerfail-proxmox.sh` | ~4 KB | Основной оркестратор на Proxmox |
-| `powerfail-proxmox.service` | 250 B | systemd unit |
-| `powerfail-xpenology.sh` | ~2 KB | Резервный скрипт на Xpenology |
-| `README.md` | — | Эта документация |

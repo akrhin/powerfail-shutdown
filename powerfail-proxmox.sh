@@ -2,14 +2,14 @@
 # ==============================================================
 # UPS Power Failure Shutdown — Proxmox (основной оркестратор)
 #
-# Версия: 1.1
+# Версия: 2.0
 # Режимы:
 #   Реальный — полный shutdown последовательности
 #   --dry-run — логирует все шаги, не выключает
 #   --debug — подробный вывод каждой проверки
 #   test-network — однократная проверка связи (для ручного теста)
 #
-# Установка: см. README.md
+# Установка: https://github.com/akrhin/powerfail-shutdown
 # ==============================================================
 
 # === Настраиваемые параметры ===
@@ -17,6 +17,7 @@ ROUTER="${ROUTER:-192.168.1.1}"
 THRESHOLD="${THRESHOLD:-3}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-30}"
 XPENOLOGY_VMID="${XPENOLOGY_VMID:-100}"
+FSCT_VMID="${FSCT_VMID:-107}"
 SHUTDOWN_TIMEOUT="${SHUTDOWN_TIMEOUT:-600}"
 LOG_TAG="POWERFAIL"
 
@@ -44,6 +45,42 @@ log() {
 die() {
     log "FATAL: $1"
     exit 1
+}
+
+_pct_stop() {
+    local ctid="$1"
+    if $DRY_RUN; then
+        log "[DRY-RUN] pct shutdown $ctid --timeout 30"
+        return 0
+    fi
+    pct shutdown "$ctid" --timeout 30 2>/dev/null && return 0
+    log "  WARN: pct shutdown $ctid failed, trying force stop..."
+    sleep 2
+    pct stop "$ctid" --force 2>/dev/null
+}
+
+_qm_stop() {
+    local vmid="$1"
+    local timeout="${2:-120}"
+    if $DRY_RUN; then
+        log "[DRY-RUN] qm shutdown $vmid --timeout $timeout"
+        return 0
+    fi
+    if ! qm shutdown "$vmid" --timeout "$timeout" 2>/dev/null; then
+        log "  WARN: qm shutdown $vmid failed, trying force stop..."
+        qm stop "$vmid" 2>/dev/null
+    fi
+
+    # Ждём когда остановится
+    local waited=0
+    while [ "$waited" -lt "$SHUTDOWN_TIMEOUT" ]; do
+        status=$(qm status "$vmid" 2>/dev/null | awk '{print $2}')
+        [ "$status" = "stopped" ] && log "  VM $vmid stopped (${waited}s)" && return 0
+        sleep 10
+        waited=$((waited + 10))
+    done
+    log "  WARN: VM $vmid did not stop within ${SHUTDOWN_TIMEOUT}s, force stopping..."
+    qm stop "$vmid" 2>/dev/null
 }
 
 # === Проверка зависимостей ===
@@ -79,7 +116,7 @@ if $TEST_MODE; then
 fi
 
 # === Основной мониторинг ===
-log "Starting UPS power failure monitor (router=$ROUTER, xpenology_vmid=$XPENOLOGY_VMID)"
+log "Starting UPS power failure monitor (router=$ROUTER)"
 $DEBUG && log "DEBUG: THRESHOLD=$THRESHOLD CHECK_INTERVAL=$CHECK_INTERVAL DRY_RUN=$DRY_RUN"
 
 while true; do
@@ -113,63 +150,44 @@ while true; do
     touch "$POWERFAIL_FILE"
 
     # -------------------
-    # Фаза 1: XPEnology (VM 100) — выключается первой, с неё NFS
-    # Остальные VM/CT монтируют NFS с XPEnology, поэтому НЕЛЬЗЯ
-    # выключать их до того как XPEnology встала
+    # Фаза 1: CT 107 (FS)
     # -------------------
-    log "Phase 1/4: Waiting for Xpenology (VM $XPENOLOGY_VMID) to shut down..."
+    log "Phase 1/5: Shutting down CT $FSCT_VMID (FS)..."
+    _pct_stop "$FSCT_VMID"
+
+    # -------------------
+    # Фаза 2: XPEnology (VM 100) — с неё NFS
+    # -------------------
+    log "Phase 2/5: Shutting down Xpenology (VM $XPENOLOGY_VMID)..."
+    _qm_stop "$XPENOLOGY_VMID"
+
+    # -------------------
+    # Фаза 3: остальные VM и LXC
+    # -------------------
+    log "Phase 3/5: Shutting down remaining VMs and containers..."
 
     if $DRY_RUN; then
-        log "[DRY-RUN] Xpenology (VM $XPENOLOGY_VMID) shuts down FIRST (its own powerfail script)"
-        log "[DRY-RUN] Would wait up to ${SHUTDOWN_TIMEOUT}s for VM $XPENOLOGY_VMID to stop"
-        log "[DRY-RUN] Xpenology shutdown SIMULATED (status=stopped)"
+        log "[DRY-RUN] Would shut down remaining VMs:"
+        qm list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$XPENOLOGY_VMID"' {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
+        log "[DRY-RUN] Would shut down remaining CTs:"
+        pct list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$FSCT_VMID"' {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
     else
-        # XPEnology уже запустила свой скрипт — ждём когда она выключится
-        waited=0
-        while [ "$waited" -lt "$SHUTDOWN_TIMEOUT" ]; do
-            status=$(qm status "$XPENOLOGY_VMID" 2>/dev/null | awk '{print $2}')
-            if [ "$status" = "stopped" ]; then
-                log "Xpenology VM $XPENOLOGY_VMID is now stopped (${waited}s)"
-                break
-            fi
-            sleep 10
-            waited=$((waited + 10))
-        done
-
-        if [ "$waited" -ge "$SHUTDOWN_TIMEOUT" ]; then
-            log "WARNING: Xpenology did not stop within ${SHUTDOWN_TIMEOUT}s. Force stopping..."
-            qm stop "$XPENOLOGY_VMID"
-            sleep 5
-        fi
-    fi
-
-    # -------------------
-    # Фаза 2: остальные VM и LXC (NFS уже неактивна)
-    # -------------------
-    log "Phase 2/4: Shutting down remaining VMs and containers..."
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would shut down VMs:"
-        qm list 2>/dev/null | awk 'NR>1 && $3=="running" {print "  - VM " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
-        log "[DRY-RUN] Would shut down containers:"
-        pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print "  - CT " $1 " (" $2 ")"}' | while read -r line; do log "[DRY-RUN] $line"; done
-    else
-        for vmid in $(qm list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}'); do
+        for vmid in $(qm list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$XPENOLOGY_VMID"' {print $1}'); do
             log "  Shutting down VM $vmid..."
             qm shutdown "$vmid" --timeout 60 &
         done
-        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}'); do
+        for ctid in $(pct list 2>/dev/null | awk 'NR>1 && $3=="running" && $1!='"$FSCT_VMID"' {print $1}'); do
             log "  Shutting down CT $ctid..."
             pct shutdown "$ctid" --timeout 30 &
         done
         wait
-        log "Phase 2 complete."
     fi
+    $DRY_RUN || log "Phase 3 complete."
 
     # -------------------
-    # Фаза 3: финальная проверка
+    # Фаза 4: финальная проверка
     # -------------------
-    log "Phase 3/4: Final check — shutting down any remaining VMs/CTs..."
+    log "Phase 4/5: Final check — force-stop any remaining VMs/CTs..."
 
     if $DRY_RUN; then
         log "[DRY-RUN] Would force-stop remaining VMs and CTs"
@@ -185,9 +203,9 @@ while true; do
     fi
 
     # -------------------
-    # Фаза 4: хост
+    # Фаза 5: хост
     # -------------------
-    log "Phase 4/4: Shutting down Proxmox host."
+    log "Phase 5/5: Shutting down Proxmox host."
 
     if $DRY_RUN; then
         log "=========================================="
