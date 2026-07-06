@@ -52,6 +52,27 @@ bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main
 | `FSCT_VMID` | 107 | ID CT с файловым сервером |
 | `SHUTDOWN_TIMEOUT` | 600 | Ждать остановки VM (сек) |
 
+## Telegram-уведомления (опционально)
+
+Скрипт может отправлять сообщения в Telegram при начале shutdown и завершении.
+
+```bash
+# На proxmox хосте:
+mkdir -p /etc/powerfail
+cp /etc/systemd/system/powerfail.conf.example /etc/powerfail/powerfail.conf
+chmod 600 /etc/powerfail/powerfail.conf
+```
+
+Отредактируй `/etc/powerfail/powerfail.conf`:
+
+```bash
+TG_BOT_TOKEN="1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
+TG_CHAT_ID="123456789"
+```
+
+Файл в гите не хранится (.gitignore), токен наружу не уйдёт.
+Если файла нет или токен пустой — уведомления не отправляются.
+
 ## Порядок выключения
 
 1. **CT 107** (FS) — первым, корректно размонтировать

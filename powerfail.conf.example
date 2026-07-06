@@ -1,0 +1,6 @@
+# Telegram notifications for powerfail-shutdown
+# Скопируй этот файл в /etc/powerfail/powerfail.conf и заполни свои данные
+# Этот файл добавлен в .gitignore — не попадёт в репозиторий
+
+# TG_BOT_TOKEN="1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
+# TG_CHAT_ID="123456789"

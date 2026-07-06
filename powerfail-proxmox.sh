@@ -5,7 +5,7 @@
 # Запускается systemd-таймером раз в 30 секунд.
 # При 3 провалах пинга подряд → shutdown sequence.
 #
-# Версия: 3.0
+# Версия: 3.1
 # Установка: https://github.com/akrhin/powerfail-shutdown
 # ==============================================================
 
@@ -16,6 +16,13 @@ XPENOLOGY_VMID="${XPENOLOGY_VMID:-100}"
 FSCT_VMID="${FSCT_VMID:-107}"
 SHUTDOWN_TIMEOUT="${SHUTDOWN_TIMEOUT:-600}"
 LOG_TAG="POWERFAIL"
+
+# Telegram (опционально — подключить через EnvironmentFile)
+# Создай /etc/powerfail/powerfail.conf:
+#   TG_BOT_TOKEN="123456:ABC-DEF..."
+#   TG_CHAT_ID="123456789"
+TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
+TG_CHAT_ID="${TG_CHAT_ID:-}"
 
 COUNTER_FILE="${COUNTER_FILE:-/tmp/powerfail_proxmox_counter}"
 POWERFAIL_FILE="${POWERFAIL_FILE:-/tmp/.powerfail_active}"
@@ -40,6 +47,18 @@ log() {
 die() {
     log "FATAL: $1"
     exit 1
+}
+
+_tg_send() {
+    local msg="$1"
+    if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+        return 0
+    fi
+    local ts=$(date '+%Y-%m-%d %H:%M:%S')
+    local payload="chat_id=${TG_CHAT_ID}&text=[${ts}]%20${msg}&disable_web_page_preview=1"
+    curl -s -o /dev/null --connect-timeout 10 --max-time 15 \
+        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -d "$payload" || log "WARN: failed to send Telegram notification"
 }
 
 _pct_stop() {
@@ -100,8 +119,15 @@ if [ "${TEST_MODE:-false}" = true ]; then
     echo ""
     echo "Running CTs:"
     pct list 2>/dev/null | awk 'NR==1{printf "  %-5s %-10s\n", $1, $2} NR>1{printf "  %-5s %-10s\n", $1, $2}'
+    if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+        echo ""
+        echo "📨 Telegram: настроен (chat_id = $TG_CHAT_ID)"
+    else
+        echo ""
+        echo "📨 Telegram: не настроен (задай TG_BOT_TOKEN и TG_CHAT_ID)"
+    fi
     echo ""
-    echo "Test complete. Use --dry-run for a full shutdown simulation."
+    echo "Test complete."
     exit 0
 fi
 
@@ -136,6 +162,9 @@ fi
 # === Достигнут порог — shutdown sequence ===
 log "!!! POWER FAILURE DETECTED — initiating shutdown sequence"
 touch "$POWERFAIL_FILE"
+
+# Уведомление в Telegram
+_tg_send "⚠️ POWER FAILURE — router ${ROUTER} unreachable. Starting shutdown sequence."
 
 # Фаза 1: CT 107 (FS)
 log "Phase 1/5: Shutting down CT $FSCT_VMID (FS)..."
@@ -179,6 +208,8 @@ fi
 
 # Фаза 5: хост
 log "Phase 5/5: Shutting down Proxmox host."
+_tg_send "🛑 Power failure shutdown complete — host going down."
+
 if $DRY_RUN; then
     log "[DRY-RUN] *** SHUTDOWN SIMULATED ***"
     echo 0 > "$COUNTER_FILE"

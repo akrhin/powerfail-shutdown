@@ -3,4 +3,5 @@ Description=UPS Power Failure Check
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/powerfail/powerfail.conf
 ExecStart=/usr/local/bin/powerfail-proxmox.sh

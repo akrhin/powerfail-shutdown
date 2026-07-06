@@ -7,6 +7,7 @@ RAW="https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main"
 
 BIN_DIR="/usr/local/bin"
 SERVICE_DIR="/etc/systemd/system"
+CONFIG_DIR="/etc/powerfail"
 
 SCRIPT="powerfail-proxmox.sh"
 SERVICE="powerfail-proxmox.service"
@@ -27,9 +28,9 @@ echo ""
 ! command -v qm &>/dev/null && { err "Это не Proxmox (qm не найден)"; exit 1; }
 
 # --- Скачивание ---
-echo "📥 Скачиваю ф��йлы..."
+echo "Скачиваю файлы..."
 
-for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER"; do
+for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER" "powerfail.conf.example:$SERVICE_DIR/powerfail.conf.example"; do
     src="${pair%%:*}"
     dst="${pair##*:}"
     if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW/$src" -o "$dst"; then
@@ -40,9 +41,17 @@ for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:
     ok "$dst"
 done
 
+# --- Конфиг (если не существует) ---
+if [ ! -f "$CONFIG_DIR/powerfail.conf" ]; then
+    mkdir -p "$CONFIG_DIR"
+    cp "$SERVICE_DIR/powerfail.conf.example" "$CONFIG_DIR/powerfail.conf" 2>/dev/null
+    chmod 600 "$CONFIG_DIR/powerfail.conf" 2>/dev/null
+    ok "Создан $CONFIG_DIR/powerfail.conf — заполни TG_BOT_TOKEN и TG_CHAT_ID"
+fi
+
 # --- Параметры ---
 echo ""
-echo "⚙️  Параметры по умолчанию:"
+echo "Параметры по умолчанию:"
 echo "   ROUTER       = 192.168.1.1  (роутер НЕ в ИБП)"
 echo "   THRESHOLD    = 3            (провалов пинга до shutdown)"
 echo "   XPENOLOGY    = 100          (VM ID)"
@@ -53,16 +62,13 @@ echo "   Отредактируй в $BIN_DIR/$SCRIPT"
 
 # --- Активация таймера ---
 systemctl daemon-reload
-
-# Останавливаем старый сервис (если был Type=simple с циклом)
 systemctl stop "$SERVICE" 2>/dev/null
 systemctl disable "$SERVICE" 2>/dev/null
 
-# Ставим новый
 systemctl enable "$TIMER" 2>/dev/null && ok "Таймер добавлен в автозагрузку" || err "Не удалось включить таймер"
 systemctl start "$TIMER" 2>/dev/null && ok "Таймер запущен" || err "Не удалось запустить таймер"
 
-# Первый запуск (чтобы не ждать 30 сек)
+# Первый запуск
 systemctl start "$SERVICE" 2>/dev/null &
 sleep 1
 
@@ -83,6 +89,8 @@ echo "    journalctl -u $SERVICE -f"
 echo ""
 echo "  Таймер:"
 echo "    systemctl status $TIMER"
+echo ""
+echo "  Telegram: настроить /etc/powerfail/powerfail.conf"
 echo ""
 echo "  Подробнее: $REPO"
 echo ""

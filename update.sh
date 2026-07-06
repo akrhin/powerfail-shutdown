@@ -32,7 +32,7 @@ if [ -f "$BIN_DIR/$SCRIPT" ]; then
 fi
 
 # --- Скачивание ---
-for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER"; do
+for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER" "powerfail.conf.example:$SERVICE_DIR/powerfail.conf.example"; do
     src="${pair%%:*}"
     dst="${pair##*:}"
     if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW/$src" -o "$dst"; then
