@@ -62,9 +62,9 @@ _tg_send() {
     fi
     local ts=$(date '+%Y-%m-%d %H:%M:%S')
     local payload="chat_id=${TG_CHAT_ID}&text=[${ts}]%20${msg}&disable_web_page_preview=1"
-    curl -s -o /dev/null --connect-timeout 10 --max-time 15 \
+    curl -s -o /dev/null --connect-timeout 10 --max-time 15 -k \
         "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-        -d "$payload" || log "WARN: failed to send Telegram notification"
+        -d "$payload" || log "WARN: failed to send Telegram notification (curl exit $?)"
 }
 
 _pct_stop() {
@@ -151,7 +151,7 @@ if [ "${TEST_TELEGRAM:-false}" = true ]; then
     echo "   chat_id: $TG_CHAT_ID"
     _ts="$(date '+%Y-%m-%d %H:%M:%S')"
     _payload="chat_id=${TG_CHAT_ID}&text=[${_ts}]%20✅%20Тест%20—%20powerfail-shutdown%20работает.&disable_web_page_preview=1"
-    _response="$(curl -s --connect-timeout 10 --max-time 15 \
+    _response="$(curl -s --connect-timeout 10 --max-time 15 -k \
         "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
         -d "$_payload" 2>&1)"
     echo ""
