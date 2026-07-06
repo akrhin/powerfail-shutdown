@@ -21,12 +21,20 @@ LOG_TAG="POWERFAIL"
 # Настройки: /etc/powerfail/powerfail.conf
 #   TG_BOT_TOKEN="123456:ABC-DEF..."
 #   TG_CHAT_ID="123456789"
+#   TG_PROXY="socks5h://192.168.1.100:1080"  # опционально: SOCKS5 прокси
 TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
 TG_CHAT_ID="${TG_CHAT_ID:-}"
+TG_PROXY="${TG_PROXY:-}"
 
 # Если при ручном запуске переменные пустые — читаем из файла конфига
 if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
     [ -f "/etc/powerfail/powerfail.conf" ] && source "/etc/powerfail/powerfail.conf"
+fi
+
+# Прокси для Telegram (если задан — все HTTPS запросы через него)
+if [ -n "$TG_PROXY" ]; then
+    export https_proxy="$TG_PROXY"
+    export http_proxy="$TG_PROXY"
 fi
 
 COUNTER_FILE="${COUNTER_FILE:-/tmp/powerfail_proxmox_counter}"
@@ -150,6 +158,9 @@ if [ "${TEST_TELEGRAM:-false}" = true ]; then
     echo "📨 Отправляю тестовое сообщение в Telegram..."
     echo "   bot_token: ${TG_BOT_TOKEN:0:8}...${TG_BOT_TOKEN: -4}"
     echo "   chat_id: $TG_CHAT_ID"
+    if [ -n "$TG_PROXY" ]; then
+        echo "   proxy: $TG_PROXY"
+    fi
     _ts="$(date '+%Y-%m-%d %H:%M:%S')"
     _http_code="$(curl -s -o /tmp/powerfail_tg_test.json -w '%{http_code}' \
         --connect-timeout 10 --max-time 15 -k \

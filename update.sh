@@ -55,17 +55,17 @@ fi
 # --- Скачивание ---
 if _dl "$SCRIPT" "$BIN_DIR/$SCRIPT"; then
     chmod +x "$BIN_DIR/$SCRIPT"
-    ok "скрипт"
+    ok "$BIN_DIR/$SCRIPT"
 else
     err "Не удалось скачать $SCRIPT"
-    [ -n "$BACKUP" ] && cp "$BACKUP" "$BIN_DIR/$SCRIPT" && ok "откат"
+    [ -n "$BACKUP" ] && cp "$BACKUP" "$BIN_DIR/$SCRIPT" && ok "Восстановлен из резервной копии"
     exit 1
 fi
 
-_dl "$SERVICE" "$SERVICE_DIR/$SERVICE" && ok "service" || warn "service не обновлён"
+_dl "$SERVICE" "$SERVICE_DIR/$SERVICE" && ok "$SERVICE_DIR/$SERVICE" || warn "service не обновлён"
 
 if _dl "$TIMER" "$SERVICE_DIR/$TIMER"; then
-    ok "timer"
+    ok "$SERVICE_DIR/$TIMER"
 else
     warn "timer не скачался, создаю встроенный"
     cat > "$SERVICE_DIR/$TIMER" << 'TIMEREOF'
@@ -81,7 +81,7 @@ AccuracySec=1
 [Install]
 WantedBy=timers.target
 TIMEREOF
-    ok "timer (встроенный)"
+    ok "$SERVICE_DIR/$TIMER (создан)"
 fi
 
 _dl "powerfail.conf.example" "$SERVICE_DIR/powerfail.conf.example" || true
