@@ -25,16 +25,32 @@ echo ""
 
 [ "$(id -u)" -ne 0 ] && { err "Запусти от root."; exit 1; }
 
-# Выбираем загрузчик
-DL=""
+# Определяем загрузчик
+DL_BIN=""
 if command -v wget &>/dev/null; then
-    DL="wget -q -O"
+    DL_BIN="wget"
+    DL_CMD="wget --retry-connrefused --timeout=15 -q -O"
 elif command -v curl &>/dev/null; then
-    DL="curl -sL --connect-timeout 10 --max-time 30 -o"
+    DL_BIN="curl"
+    DL_CMD="curl -sL --connect-timeout 15 --max-time 30 --retry 3 -o"
 else
     err "Ни wget, ни curl не найдены"
     exit 1
 fi
+
+# Функция загрузки с повторными попытками
+_download() {
+    local src="$1" dst="$2" attempt=1 max=3
+    while [ $attempt -le $max ]; do
+        if $DL_CMD "$dst" "$RAW/$src" 2>/dev/null; then
+            [ -s "$dst" ] && return 0
+        fi
+        warn "Попытка $attempt/$max — $src не скачался, жду 3 сек..."
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
 
 # --- Резервная копия ---
 if [ -f "$BIN_DIR/$SCRIPT" ]; then
@@ -43,21 +59,28 @@ if [ -f "$BIN_DIR/$SCRIPT" ]; then
     ok "Резервная копия: $BACKUP"
 fi
 
-# --- Скачивание ---
+# --- Скачивание с ретраями ---
+ANY_FAIL=false
 for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER" "powerfail.conf.example:$SERVICE_DIR/powerfail.conf.example"; do
     src="${pair%%:*}"
     dst="${pair##*:}"
-    if ! $DL "$dst" "$RAW/$src"; then
-        err "Не удалось скачать $src"
-        if [ -n "$BACKUP" ] && [ "$src" = "$SCRIPT" ]; then
-            cp "$BACKUP" "$BIN_DIR/$SCRIPT"
-            ok "Откат до резервной копии"
-        fi
-        exit 1
+    if _download "$src" "$dst"; then
+        chmod +x "$dst" 2>/dev/null
+        ok "$dst"
+    else
+        err "Не удалось скачать $src после 3 попыток"
+        ANY_FAIL=true
     fi
-    chmod +x "$dst" 2>/dev/null
-    ok "$dst"
 done
+
+# Если скрипт не скачался — откат
+if [ ! -f "$BIN_DIR/$SCRIPT" ] || [ ! -s "$BIN_DIR/$SCRIPT" ]; then
+    if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
+        cp "$BACKUP" "$BIN_DIR/$SCRIPT"
+        warn "Восстановлен из резервной копии"
+        $ANY_FAIL && ok "Остальные файлы не критичны — сервис работает на старой версии"
+    fi
+fi
 
 # --- Конфиг (если не существует) ---
 if [ ! -f "$CONFIG_DIR/powerfail.conf" ]; then
