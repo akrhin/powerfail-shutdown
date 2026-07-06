@@ -140,12 +140,30 @@ fi
 # === Режим test-telegram ===
 if [ "${TEST_TELEGRAM:-false}" = true ]; then
     if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
-        echo "❌ Telegram не настроен. Заполни /etc/powerfail/powerfail.conf"
+        echo "❌ Telegram не настроен."
+        echo "   TG_BOT_TOKEN='${TG_BOT_TOKEN:+set}' (длина: ${#TG_BOT_TOKEN})"
+        echo "   TG_CHAT_ID='${TG_CHAT_ID:+set}' (длина: ${#TG_CHAT_ID})"
+        echo "   Заполни /etc/powerfail/powerfail.conf"
         exit 1
     fi
     echo "📨 Отправляю тестовое сообщение в Telegram..."
-    _tg_send "✅ Тест — powerfail-shutdown работает. Роутер ${ROUTER} в норме."
-    echo "✅ Отправлено. Проверь Telegram."
+    echo "   bot_token: ${TG_BOT_TOKEN:0:8}...${TG_BOT_TOKEN: -4}"
+    echo "   chat_id: $TG_CHAT_ID"
+    _ts="$(date '+%Y-%m-%d %H:%M:%S')"
+    _payload="chat_id=${TG_CHAT_ID}&text=[${_ts}]%20✅%20Тест%20—%20powerfail-shutdown%20работает.&disable_web_page_preview=1"
+    _response="$(curl -s --connect-timeout 10 --max-time 15 \
+        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -d "$_payload" 2>&1)"
+    echo ""
+    echo "📩 Ответ Telegram API:"
+    echo "$_response" | head -5
+    if echo "$_response" | grep -q '"ok":true'; then
+        echo ""
+        echo "✅ Сообщение отправлено! Проверь Telegram."
+    else
+        echo ""
+        echo "❌ Ошибка. Проверь токен и chat ID."
+    fi
     exit 0
 fi
 
