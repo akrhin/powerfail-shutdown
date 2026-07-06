@@ -34,7 +34,15 @@ APC Back-UPS ES 400, без USB/сеть, ~60 Вт нагрузка.
 
 ## Установка на Proxmox
 
-### 1. Клонировать репозиторий
+### Быстрая установка (одной командой)
+
+```bash
+sudo bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/install.sh)
+```
+
+### Или вручную
+
+1. Клонировать репозиторий
 
 ```bash
 # На proxmox хосте (или любом Linux с доступом по ssh)
@@ -81,6 +89,16 @@ systemctl status powerfail-proxmox.service
 # Режим сухого прогона — имитация shutdown без выключения
 /usr/local/bin/powerfail-proxmox.sh --dry-run --debug
 ```
+
+---
+
+## Обновление
+
+```bash
+sudo bash <(curl -sL https://raw.githubusercontent.com/akrhin/powerfail-shutdown/main/update.sh)
+```
+
+Скрипт сохранит резервную копию текущей версии, скачает свежую из GitHub и перезапустит сервис.
 
 ---
 
