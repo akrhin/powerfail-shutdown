@@ -27,13 +27,23 @@ echo ""
 [ "$(id -u)" -ne 0 ] && { err "Запусти от root."; exit 1; }
 ! command -v qm &>/dev/null && { err "Это не Proxmox (qm не найден)"; exit 1; }
 
-# --- Скачивание ---
+# Выбираем загрузчик: wget надёжнее, curl fallback
+DL=""
+if command -v wget &>/dev/null; then
+    DL="wget -q -O"
+elif command -v curl &>/dev/null; then
+    DL="curl -sL --connect-timeout 10 --max-time 30 -o"
+else
+    err "Ни wget, ни curl не найдены"
+    exit 1
+fi
+
 echo "Скачиваю файлы..."
 
 for pair in "$SCRIPT:$BIN_DIR/$SCRIPT" "$SERVICE:$SERVICE_DIR/$SERVICE" "$TIMER:$SERVICE_DIR/$TIMER" "powerfail.conf.example:$SERVICE_DIR/powerfail.conf.example"; do
     src="${pair%%:*}"
     dst="${pair##*:}"
-    if ! curl -sL --connect-timeout 10 --max-time 30 "$RAW/$src" -o "$dst"; then
+    if ! $DL "$dst" "$RAW/$src"; then
         err "Не удалось скачать $src"
         exit 1
     fi
@@ -58,7 +68,6 @@ echo "   XPENOLOGY    = 100          (VM ID)"
 echo "   FSCT         = 107          (CT ID)"
 echo "   CHECK_EVERY  = 30 сек       (systemd timer)"
 echo ""
-echo "   Отредактируй в $BIN_DIR/$SCRIPT"
 
 # --- Активация таймера ---
 systemctl daemon-reload
@@ -90,7 +99,7 @@ echo ""
 echo "  Таймер:"
 echo "    systemctl status $TIMER"
 echo ""
-echo "  Telegram: настроить /etc/powerfail/powerfail.conf"
+echo "  Telegram: настроить $CONFIG_DIR/powerfail.conf"
 echo ""
 echo "  Подробнее: $REPO"
 echo ""
