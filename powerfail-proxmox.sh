@@ -76,20 +76,6 @@ _tg_send() {
         || log "WARN: telegram sendMessage failed"
 }
 
-_socket_api() {
-    local action="$1"  # status, turn_off
-    case "$action" in
-        status)
-            curl -s --connect-timeout 5 --max-time 10 \
-                "http://${SOCKET_IP}/switch/0" 2>/dev/null || return 1
-            ;;
-        turn_off)
-            curl -s --connect-timeout 5 --max-time 10 \
-                -X POST "http://${SOCKET_IP}/switch/0/turn_off" 2>/dev/null || return 1
-            ;;
-    esac
-}
-
 # === Проверка розетки (ESP32) ===
 _socket_ok() {
     # Пинг — розетка без питания не отвечает
@@ -176,21 +162,11 @@ _shutdown_sequence() {
         exit 0
     fi
 
-    # POWEROFF, не halt!
-    log "GOODBYE — poweroff host"
-    poweroff &
-    POWEROFF_PID=$!
+    log "GOODBYE — poweroff"
+    poweroff
 
-    # Ждём пока сервер выключится, потом отключаем розетку
-    log "Phase 6/6: Waiting ${POWEROFF_DELAY}s for shutdown, then turning off socket..."
-    sleep "$POWEROFF_DELAY"
-
-    # Отключаем розетку (ESPHome API) — обесточиваем ИБП
-    log "Turning off smart socket at $SOCKET_IP..."
-    _socket_api turn_off || log "WARN: failed to turn off socket (expected if already off)"
-
-    # Ждём пока нас не вырубят
-    sleep 300
+    # Страховка — дошли сюда значит poweroff не сработал
+    sleep 120
     die "Poweroff did not execute!"
 }
 
