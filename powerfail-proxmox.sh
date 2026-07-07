@@ -4,27 +4,32 @@
 #
 # Запускается systemd-таймером раз в 30 секунд.
 #
-# Детекция: умная розетка (HA) + пинг роутера (fallback).
+# Детекция: ESP32-розетка (192.168.1.100) + пинг роутера.
+# Розетка стоит ПЕРЕД ИБП — если нет 220В, она не пингуется.
 # Роутер в ИБП — локальная сеть и интернет живы при отключении.
+#
+# При подтверждённом пропадании питания:
+#   1. Shutdown всех VM/CT
+#   2. Shutdown хоста (systemctl poweroff)
+#   3. Выключение розетки (ESPHome API) — обесточивает ИБП
+#   4. При восстановлении 220В розетка включается → сервер стартует
 #
 # Уведомление в Telegram ДО shutdown (пока есть интернет)
 # и ПОСЛЕ восстановления питания (через флаг на диске).
 #
-# Версия: 4.0
+# Версия: 5.0
 # Установка: https://github.com/akrhin/powerfail-shutdown
 # ==============================================================
 
 # === Настраиваемые параметры ===
 ROUTER="${ROUTER:-192.168.1.1}"
+SOCKET_IP="${SOCKET_IP:-192.168.1.100}"
 THRESHOLD="${THRESHOLD:-3}"
 XPENOLOGY_VMID="${XPENOLOGY_VMID:-100}"
 FSCT_VMID="${FSCT_VMID:-107}"
 SHUTDOWN_TIMEOUT="${SHUTDOWN_TIMEOUT:-600}"
 LOG_TAG="POWERFAIL"
-
-# Home Assistant — умная розетка (опционально)
-HA_API_URL="${HA_API_URL:-}"
-HA_API_TOKEN="${HA_API_TOKEN:-}"
+POWEROFF_DELAY="${POWEROFF_DELAY:-30}"  # секунд ждать после shutdown перед отключением розетки
 
 # Telegram (опционально)
 TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
@@ -32,7 +37,7 @@ TG_CHAT_ID="${TG_CHAT_ID:-}"
 TG_PROXY="${TG_PROXY:-}"
 
 # Подгрузка конфига
-if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ] || [ -z "$HA_API_TOKEN" ]; then
+if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
     [ -f "/etc/powerfail/powerfail.conf" ] && source "/etc/powerfail/powerfail.conf"
 fi
 
@@ -71,16 +76,24 @@ _tg_send() {
         || log "WARN: telegram sendMessage failed"
 }
 
-# === Проверка розетки через HA ===
-_ha_power_ok() {
-    [ -z "$HA_API_URL" ] || [ -z "$HA_API_TOKEN" ] && return 0  # не настроено = считаем ОК
-    local result
-    result=$(curl -s --connect-timeout 5 --max-time 10 \
-        -H "Authorization: Bearer $HA_API_TOKEN" \
-        -H "Content-Type: application/json" \
-        "$HA_API_URL" 2>/dev/null)
-    echo "$result" | grep -q '"state":"on"' && return 0
-    return 1
+_socket_api() {
+    local action="$1"  # status, turn_off
+    case "$action" in
+        status)
+            curl -s --connect-timeout 5 --max-time 10 \
+                "http://${SOCKET_IP}/switch/0" 2>/dev/null || return 1
+            ;;
+        turn_off)
+            curl -s --connect-timeout 5 --max-time 10 \
+                -X POST "http://${SOCKET_IP}/switch/0/turn_off" 2>/dev/null || return 1
+            ;;
+    esac
+}
+
+# === Проверка розетки (ESP32) ===
+_socket_ok() {
+    # Пинг — розетка без питания не отвечает
+    ping -c 1 -W 2 "$SOCKET_IP" >/dev/null 2>&1
 }
 
 # === Проверка роутера (локальная сеть) ===
@@ -120,9 +133,8 @@ _shutdown_sequence() {
     # Уведомление ДО shutdown (интернет пока есть — роутер в ИБП)
     _tg_send "⚠️ POWER FAILURE (${ts}) — питание пропало. Запускаю shutdown sequence."
 
-    # Флаг для пост-уведомления после reboot
+    # Флаг для пост-уведомления после восстановления
     echo "$ts" > "/root/.powerfail_occurred"
-
     touch "$POWERFAIL_FILE"
 
     log "Phase 1/5: Shutting down CT $FSCT_VMID (FS)..."
@@ -154,8 +166,8 @@ _shutdown_sequence() {
         done
     fi
 
-    log "Phase 5/5: Shutting down Proxmox host."
-    _tg_send "🛑 Power failure shutdown complete — host (${ts})."
+    log "Phase 5/6: Shutting down Proxmox host (poweroff)..."
+    _tg_send "🛑 Power failure — shutting down host (${ts})."
 
     if $DRY_RUN; then
         log "[DRY-RUN] *** SHUTDOWN SIMULATED ***"
@@ -164,10 +176,22 @@ _shutdown_sequence() {
         exit 0
     fi
 
-    log "GOODBYE — shutting down host"
-    shutdown -h now
+    # POWEROFF, не halt!
+    log "GOODBYE — poweroff host"
+    poweroff &
+    POWEROFF_PID=$!
+
+    # Ждём пока сервер выключится, потом отключаем розетку
+    log "Phase 6/6: Waiting ${POWEROFF_DELAY}s for shutdown, then turning off socket..."
+    sleep "$POWEROFF_DELAY"
+
+    # Отключаем розетку (ESPHome API) — обесточиваем ИБП
+    log "Turning off smart socket at $SOCKET_IP..."
+    _socket_api turn_off || log "WARN: failed to turn off socket (expected if already off)"
+
+    # Ждём пока нас не вырубят
     sleep 300
-    die "shutdown did not execute!"
+    die "Poweroff did not execute!"
 }
 
 # === Зависимости ===
@@ -175,7 +199,7 @@ command -v ping >/dev/null 2>&1 || die "ping not found"
 command -v curl >/dev/null 2>&1 || die "curl not found"
 command -v qm >/dev/null 2>&1 || die "qm not found (not Proxmox?)"
 command -v pct >/dev/null 2>&1 || die "pct not found (not Proxmox?)"
-command -v shutdown >/dev/null 2>&1 || die "shutdown not found"
+command -v poweroff >/dev/null 2>&1 || die "poweroff not found"
 
 # =========================================================
 # РЕЖИМ: test-network
@@ -186,12 +210,10 @@ if [ "${TEST_MODE:-false}" = true ]; then
 
     if _router_ok; then echo "🌐 Роутер ($ROUTER): ✅ UP"; else echo "🌐 Роутер ($ROUTER): ❌ DOWN"; fi
 
-    if [ -z "$HA_API_URL" ]; then
-        echo "🔌 Розетка (HA): ⏭️  не настроена"
-    elif _ha_power_ok; then
-        echo "🔌 Розетка (HA): ✅ ON"
+    if _socket_ok; then
+        echo "🔌 Розетка ($SOCKET_IP): ✅ ON"
     else
-        echo "🔌 Розетка (HA): ❌ OFF"
+        echo "🔌 Розетка ($SOCKET_IP): ❌ OFF"
     fi
 
     echo ""
@@ -263,12 +285,12 @@ if [ -f "$POWERFAIL_FILE" ]; then
 fi
 
 # --- Этап 2: Детекция ---
-ha_ok=true
+socket_ok=true
 router_ok=true
 
-if ! _ha_power_ok; then
-    ha_ok=false
-    log "🔌 Розетка OFF — питание не обнаружено"
+if ! _socket_ok; then
+    socket_ok=false
+    log "🔌 Розетка ($SOCKET_IP) OFF — питание не обнаружено"
 fi
 
 if ! _router_ok; then
@@ -277,7 +299,7 @@ if ! _router_ok; then
 fi
 
 # Если всё ОК — сброс счетчика
-if $ha_ok && $router_ok; then
+if $socket_ok && $router_ok; then
     [ -f "$COUNTER_FILE" ] && echo 0 > "$COUNTER_FILE"
     exit 0
 fi
@@ -289,9 +311,9 @@ counter=$((counter + 1))
 echo "$counter" > "$COUNTER_FILE"
 
 # Определяем причину в лог
-if ! $ha_ok && ! $router_ok; then
+if ! $socket_ok && ! $router_ok; then
     log "⚠️  Power failure suspicion $counter/$THRESHOLD — розетка OFF + роутер DOWN"
-elif ! $ha_ok; then
+elif ! $socket_ok; then
     log "⚠️  Power failure suspicion $counter/$THRESHOLD — розетка OFF (роутер жив)"
 else
     log "⚠️  Power failure suspicion $counter/$THRESHOLD — роутер DOWN (розетка ОК)"
