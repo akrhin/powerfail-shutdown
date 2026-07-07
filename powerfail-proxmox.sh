@@ -76,7 +76,7 @@ _ha_power_ok() {
     [ -z "$HA_API_URL" ] || [ -z "$HA_API_TOKEN" ] && return 0  # не настроено = считаем ОК
     local result
     result=$(curl -s --connect-timeout 5 --max-time 10 \
-        -H "Authorization: Bearer ${HA_API_TOKEN}" \
+        -H "Authorization: Bearer $HA_API_TOKEN" \
         -H "Content-Type: application/json" \
         "$HA_API_URL" 2>/dev/null)
     echo "$result" | grep -q '"state":"on"' && return 0
