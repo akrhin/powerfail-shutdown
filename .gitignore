@@ -1,2 +1,7 @@
-powerfail.conf
+/bin/
+/tmp/
 *.bak.*
+.env
+*.swp
+*.swo
+.DS_Store

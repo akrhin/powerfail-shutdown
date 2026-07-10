@@ -1,0 +1,72 @@
+# Powerfail Agent — конфигурация
+# Полный путь: /etc/powerfail/powerfail.conf
+
+[detection]
+# Режим детекции:
+#   ping — только ping (PING_MAIN подозрение, PING_SECONDARY подтверждение)
+#   ha   — только Home Assistant (priority=1 подозрение, priority>=2 подтверждение)
+#   any  — любой источник даёт подозрение, два любых = immediate shutdown
+#   all  — все источники должны согласиться
+mode = "any"
+
+# Количество последовательных подозрений до shutdown
+threshold = 3
+
+[ping]
+# Основная цель — первым пропадает при отключении 220В (розетка перед ИБП)
+main = "192.168.1.100"
+
+# Вторичная цель — пропадает если проблемы серьёзнее (роутер)
+secondary = "192.168.1.1"
+
+[ha]
+# Home Assistant API
+url = "http://192.168.1.100:8123"
+token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# Первая сущность с priority=1 = primary (подозрение)
+# Остальные с priority>=2 = secondary (подтверждение)
+[[ha.entity]]
+id = "binary_sensor.athom_wall_outlet_dd4e0a_status"
+priority = 1
+
+[[ha.entity]]
+id = "binary_sensor.ups_on_line"
+priority = 2
+
+[shutdown]
+# Максимальное время ожидания остановки VM (секунды)
+timeout_secs = 600
+
+# Пауза перед poweroff (секунды)
+poweroff_delay_secs = 30
+
+# Порядок выключения:
+#   type="vm"     — qm shutdown, ждать остановки
+#   type="ct"     — pct shutdown
+#   type="wait"   — пауза (требуется timeout)
+#   type="all_vm" — все оставшиеся VM (force-stop)
+#   type="all_ct" — все оставшиеся CT (force-stop)
+[[shutdown.step]]
+type = "ct"
+vmid = 107
+
+[[shutdown.step]]
+type = "wait"
+timeout = 10
+
+[[shutdown.step]]
+type = "vm"
+vmid = 100
+timeout = 300
+
+[[shutdown.step]]
+type = "all_vm"
+
+[[shutdown.step]]
+type = "all_ct"
+
+[telegram]
+bot_token = "***"
+chat_id = 123456789
+proxy = "socks5h://192.168.1.100:1080"
