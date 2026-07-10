@@ -93,23 +93,27 @@ func testNetwork(path string) {
 	fmt.Println()
 
 	// Show VM/CT status via CLI
-	vms, _ := osExec("qm", "list")
-	if vms != "" {
-		fmt.Println("VMs:")
-		for _, line := range strings.Split(vms, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 3 && (fields[0] == "VMID" || fields[2] == "running") {
-				fmt.Printf("  %s\n", line)
+	if out, err := exec.Command("qm", "list").Output(); err == nil {
+		vms := string(out)
+		if vms != "" {
+			fmt.Println("VMs:")
+			for _, line := range strings.Split(vms, "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 3 && (fields[0] == "VMID" || fields[2] == "running") {
+					fmt.Printf("  %s\n", line)
+				}
 			}
 		}
 	}
-	cts, _ := osExec("pct", "list")
-	if cts != "" {
-		fmt.Println("CTs:")
-		for _, line := range strings.Split(cts, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && (fields[0] == "CTID" || fields[1] == "running") {
-				fmt.Printf("  %s\n", line)
+	if out, err := exec.Command("pct", "list").Output(); err == nil {
+		cts := string(out)
+		if cts != "" {
+			fmt.Println("CTs:")
+			for _, line := range strings.Split(cts, "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 && (fields[0] == "CTID" || fields[1] == "running") {
+					fmt.Printf("  %s\n", line)
+				}
 			}
 		}
 	}
@@ -160,7 +164,9 @@ func install() {
 		log.Fatal("install must be run as root")
 	}
 	// Create config directory
-	os.MkdirAll("/etc/powerfail", 0755)
+	if err := os.MkdirAll("/etc/powerfail", 0755); err != nil {
+		log.Fatalf("create config dir: %v", err)
+	}
 
 	// Systemd service unit
 	service := `[Unit]
@@ -170,7 +176,9 @@ Description=Powerfail Agent
 Type=oneshot
 ExecStart=/usr/local/bin/powerfail-agent run --config /etc/powerfail/powerfail.conf
 `
-	os.WriteFile("/etc/systemd/system/powerfail-agent.service", []byte(service), 0644)
+	if err := os.WriteFile("/etc/systemd/system/powerfail-agent.service", []byte(service), 0644); err != nil {
+		log.Fatalf("write service: %v", err)
+	}
 
 	// Systemd timer — every 30s
 	timer := `[Unit]
@@ -185,18 +193,21 @@ AccuracySec=1
 [Install]
 WantedBy=timers.target
 `
-	os.WriteFile("/etc/systemd/system/powerfail-agent.timer", []byte(timer), 0644)
+	if err := os.WriteFile("/etc/systemd/system/powerfail-agent.timer", []byte(timer), 0644); err != nil {
+		log.Fatalf("write timer: %v", err)
+	}
 
-	osExec("systemctl", "daemon-reload")
-	osExec("systemctl", "enable", "powerfail-agent.timer")
-	osExec("systemctl", "start", "powerfail-agent.timer")
+	mustExec("systemctl", "daemon-reload")
+	mustExec("systemctl", "enable", "powerfail-agent.timer")
+	mustExec("systemctl", "start", "powerfail-agent.timer")
 
 	fmt.Println("✅ Systemd timer installed and started.")
 	fmt.Println("   Edit config: /etc/powerfail/powerfail.conf")
 }
 
-func osExec(name string, args ...string) (string, error) {
+func mustExec(name string, args ...string) {
 	cmd := exec.Command(name, args...)
-	out, err := cmd.Output()
-	return string(out), err
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("⚠️  %s %v: %s\n", name, args, string(out))
+	}
 }

@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"time"
@@ -15,9 +16,9 @@ import (
 )
 
 const (
-	flagOccurred   = "/root/.powerfail_occurred"
-	counterFile    = "/tmp/powerfail_counter"
-	powerfailFile  = "/tmp/.powerfail_active"
+	flagOccurred  = "/root/.powerfail_occurred"
+	counterFile   = "/tmp/powerfail_counter"
+	powerfailFile = "/tmp/.powerfail_active"
 )
 
 // Run executes one full check cycle.
@@ -38,9 +39,11 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 		occurredAt := string(data)
 		if pingRouter(ctx, cfg.Ping.Main) {
 			if notif != nil {
-				notif.SendMarkdown(ctx, fmt.Sprintf("⚡ *Power restored* — outage was at %s", occurredAt))
+				if err := notif.SendMarkdown(ctx, fmt.Sprintf("⚡ *Power restored* — outage was at %s", occurredAt)); err != nil {
+					log.Printf("WARN: send notification: %v", err)
+				}
 			}
-			os.Remove(flagOccurred)
+			os.Remove(flagOccurred) // best-effort
 			return fmt.Sprintf("Power restored, notification sent (occurred: %s)", occurredAt), nil
 		}
 		return "Flag present but router still down — waiting", nil
@@ -59,30 +62,42 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 
 	// If everything OK — reset counter and exit
 	if !result.Suspicion {
-		os.WriteFile(counterFile, []byte("0"), 0644)
+		if err := os.WriteFile(counterFile, []byte("0"), 0644); err != nil {
+			log.Printf("WARN: write counter: %v", err)
+		}
 		return "OK — " + result.Reason, nil
 	}
 
 	// Increment counter
 	counter := 0
 	if data, err := os.ReadFile(counterFile); err == nil {
-		fmt.Sscanf(string(data), "%d", &counter)
+		if _, err := fmt.Sscanf(string(data), "%d", &counter); err != nil {
+			counter = 0
+		}
 	}
 	counter++
-	os.WriteFile(counterFile, []byte(fmt.Sprintf("%d", counter)), 0644)
+	if err := os.WriteFile(counterFile, []byte(fmt.Sprintf("%d", counter)), 0644); err != nil {
+		log.Printf("WARN: write counter: %v", err)
+	}
 
 	msg := fmt.Sprintf("⚠️ Suspicion %d/%d — %s", counter, cfg.Detection.Threshold, result.Reason)
 
 	// If threshold reached OR confirmation signal triggered
 	if counter >= cfg.Detection.Threshold || result.Confirmation {
-		os.WriteFile(flagOccurred, []byte(time.Now().Format(time.RFC3339)), 0644)
-		os.WriteFile(powerfailFile, []byte("1"), 0644)
+		if err := os.WriteFile(flagOccurred, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
+			return "", fmt.Errorf("write flag: %w", err)
+		}
+		if err := os.WriteFile(powerfailFile, []byte("1"), 0644); err != nil {
+			return "", fmt.Errorf("write powerfail flag: %w", err)
+		}
 
 		// Notify BEFORE shutdown (router on UPS — internet still up)
 		if notif != nil {
 			ts := time.Now().Format("2006-01-02 15:04:05")
 			ntxt := fmt.Sprintf("⚠️ *Power failure* (%s) — initiating shutdown sequence.", ts)
-			notif.SendMarkdown(ctx, ntxt)
+			if err := notif.SendMarkdown(ctx, ntxt); err != nil {
+				log.Printf("WARN: send shutdown alert: %v", err)
+			}
 		}
 
 		// Execute shutdown sequence
@@ -95,7 +110,9 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 
 		// Notify just before poweroff
 		if notif != nil {
-			notif.SendPlain(ctx, "🛑 Power failure — host shutting down.")
+			if err := notif.SendPlain(ctx, "🛑 Power failure — host shutting down."); err != nil {
+				log.Printf("WARN: send final alert: %v", err)
+			}
 		}
 
 		return "SHUTDOWN SEQUENCE COMPLETE", nil

@@ -1,0 +1,28 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+  gosec:
+    excludes:
+      - G204  # Subprocess launched with variable — by design on Proxmox (qm/pct)
+      - G304  # File path provided as taint input — config file path is trusted
+      - G301  # Directory permissions — /etc/powerfail, fine
+      - G302  # File permissions — flag files, fine
+      - G101  # Hardcoded credentials — example config only
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - misspell
+    - gofmt
+run:
+  timeout: 5m
+  tests: true
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -59,9 +59,6 @@ func Load(r io.Reader) (*models.Config, error) {
 }
 
 func validate(cfg *models.Config, md toml.MetaData) error {
-	if !md.IsDefined("detection", "threshold") {
-		// default is fine
-	}
 	if cfg.Detection.Threshold < 1 {
 		return fmt.Errorf("detection.threshold must be >= 1, got %d", cfg.Detection.Threshold)
 	}
