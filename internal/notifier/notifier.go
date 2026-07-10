@@ -39,9 +39,11 @@ func proxyFromConfig(proxy string) func(*http.Request) (*url.URL, error) {
 	if proxy == "" {
 		return nil
 	}
-	return func(r *http.Request) (*url.URL, error) {
-		return http.ProxyFromEnvironment(r)
+	proxyURL, err := url.Parse(proxy)
+	if err != nil {
+		return nil // invalid proxy URL, fallback to direct
 	}
+	return http.ProxyURL(proxyURL)
 }
 
 // SendMarkdown sends a Markdown-formatted message to the configured Telegram chat.

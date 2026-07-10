@@ -35,7 +35,10 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 
 	// Phase 0: Post-recovery notification
 	if _, err := os.Stat(flagOccurred); err == nil {
-		data, _ := os.ReadFile(flagOccurred)
+		data, err := os.ReadFile(flagOccurred)
+		if err != nil {
+			return "", fmt.Errorf("read occurrence flag: %w", err)
+		}
 		occurredAt := string(data)
 		if pingRouter(ctx, cfg.Ping.Main) {
 			if notif != nil {

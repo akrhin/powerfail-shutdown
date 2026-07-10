@@ -111,7 +111,7 @@ func (d *Detector) detectAny(ctx context.Context) (*Result, error) {
 	res := &Result{}
 
 	pingMain := pingHost(ctx, d.cfg.Ping.Main)
-	pingSec := false
+	pingSec := d.cfg.Ping.Secondary == "" // empty = treat as up (skip)
 	if d.cfg.Ping.Secondary != "" {
 		pingSec = pingHost(ctx, d.cfg.Ping.Secondary)
 	}
@@ -129,7 +129,8 @@ func (d *Detector) detectAny(ctx context.Context) (*Result, error) {
 	if !pingMain {
 		offs = append(offs, "ping_main")
 	}
-	if !pingSec {
+	// Only report secondary when it is actually configured
+	if d.cfg.Ping.Secondary != "" && !pingSec {
 		offs = append(offs, "ping_sec")
 	}
 	for _, ent := range d.cfg.HA.Entity {
@@ -157,7 +158,7 @@ func (d *Detector) detectAll(ctx context.Context) (*Result, error) {
 	res := &Result{}
 
 	pingMain := pingHost(ctx, d.cfg.Ping.Main)
-	pingSec := false
+	pingSec := d.cfg.Ping.Secondary == "" // empty = treat as up (skip)
 	if d.cfg.Ping.Secondary != "" {
 		pingSec = pingHost(ctx, d.cfg.Ping.Secondary)
 	}

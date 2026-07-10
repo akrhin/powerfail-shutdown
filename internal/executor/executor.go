@@ -102,7 +102,9 @@ func stopAllVM(ctx context.Context, timeout time.Duration) error {
 
 	vms := parseQMRunning(out)
 	for _, vmid := range vms {
-		_ = stopVM(ctx, vmid, timeout)
+		if err := stopVM(ctx, vmid, timeout); err != nil {
+			return fmt.Errorf("stop VM %d: %w", vmid, err)
+		}
 	}
 	return nil
 }
@@ -115,7 +117,9 @@ func stopAllCT(ctx context.Context, timeout time.Duration) error {
 
 	cts := parsePCTRunning(out)
 	for _, ctid := range cts {
-		_ = stopCT(ctx, ctid, timeout)
+		if err := stopCT(ctx, ctid, timeout); err != nil {
+			return fmt.Errorf("stop CT %d: %w", ctid, err)
+		}
 	}
 	return nil
 }
@@ -194,10 +198,11 @@ func getVMStatus(ctx context.Context, vmid int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// output format: "status: running" or "status: stopped"
-	parts := string(out)
-	if len(parts) > 8 && parts[:7] == "status:" {
-		return parts[7 : len(parts)-1], nil // trim \n
+	// output format: "status: running\n" or "status: stopped\n"
+	line := strings.TrimSpace(string(out))
+	const prefix = "status: "
+	if strings.HasPrefix(line, prefix) {
+		return line[len(prefix):], nil
 	}
-	return "", fmt.Errorf("unexpected qm status output: %s", parts)
+	return "", fmt.Errorf("unexpected qm status output: %q", line)
 }
