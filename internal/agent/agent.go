@@ -46,7 +46,7 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 					log.Printf("WARN: send notification: %v", err)
 				}
 			}
-			os.Remove(flagOccurred) // best-effort
+			_ = os.Remove(flagOccurred) // best-effort
 			return fmt.Sprintf("Power restored, notification sent (occurred: %s)", occurredAt), nil
 		}
 		return "Flag present but router still down — waiting", nil

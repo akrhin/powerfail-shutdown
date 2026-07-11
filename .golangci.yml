@@ -14,10 +14,6 @@ linters:
     errcheck:
       check-type-assertions: false
       check-blank: false
-      exclude-functions:
-        - os.Remove
-        - (io.Closer).Close
-        - (net/http.Response).Body.Close
     gosec:
       excludes:
         - G204  # Subprocess launched with variable — by design (qm/pct)

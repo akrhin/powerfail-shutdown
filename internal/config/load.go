@@ -41,7 +41,7 @@ func LoadFile(path string) (*models.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return Load(f)
 }
 
