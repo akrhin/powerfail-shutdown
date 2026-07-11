@@ -10,10 +10,10 @@ Go-агент для автоматического выключения Proxmox
 ```mermaid
 flowchart LR
     220В --> ESP32[ESP32-розетка]
-    ESP32 -- ping --> Agent[powerfail-agent\nкаждые 30с]
-    Agent --> HA[Home Assistant\nentity priority]
-    Agent --> |threshold| Shutdown[Shutdown sequence\nTOML steps]
-    Shutdown --> TG[Telegram\nуведомления]
+    ESP32 -- ping --> Agent[powerfail-agent, каждые 30с]
+    Agent --> HA[Home Assistant, entity priority]
+    Agent --> |threshold| Shutdown[Shutdown sequence, TOML steps]
+    Shutdown --> TG[Telegram, уведомления]
 ```
 
 1. Розетка стоит **перед ИБП** — без 220В перестаёт пинговаться
@@ -21,6 +21,16 @@ flowchart LR
 3. Agent сравнивает показания, считает подозрения
 4. Порог достигнут → shutdown sequence по шагам
 5. Telegram: предупреждение ДО (интернет есть) и ПОСЛЕ восстановления
+
+## Как это работает как сервис
+
+Проект ставится как **systemd timer**, дёргающий `powerfail-agent run` каждые 30 секунд:
+
+```bash
+# Таймер запускает сервис:
+powerfail-agent.timer ──→ powerfail-agent.service ──→ /usr/local/bin/powerfail-agent run
+```
+
 
 ## Установка
 
@@ -100,10 +110,11 @@ make test           # тесты
 ## CI/CD
 
 На каждый push:
-- `golangci-lint` — статический анализ
-- `go test -race -cover` — тесты с гонками
-- `gosec` — проверка безопасности
-- На тег `v*` — `goreleaser` собирает и публикует релиз
+- `golangci-lint` — статический анализ (errcheck, gosec, staticcheck, govet)
+- `govulncheck` — проверка уязвимостей Go-зависимостей
+- `gitleaks` — поиск секретов в коде
+- `go test -race -cover` — тесты
+- На тег `v*` — сборка и публикация релиза (amd64 + arm64, бинарники + install.sh)
 
 ## Xpenology (страховочный скрипт)
 

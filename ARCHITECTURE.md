@@ -74,3 +74,37 @@ lint → vulncheck → secrets-scan → test
 - G204 (exec.Command) — by design, Proxmox CLI
 - G301/G302/G306 (file permissions) — by design, flag/systemd files
 - G101 (hardcoded credentials) — only in examples
+
+## Как это работает как сервис
+
+Установленный агент живёт как **systemd timer + oneshot service**:
+
+```
+каждые 30с: powerfail-agent.timer → powerfail-agent.service → powerfail-agent run
+```
+
+### Что происходит на каждый тик
+
+```
+Detector (ping / HA)
+   │
+   ├── Питание есть ──→ counter = 0 ──→ выход (тихо)
+   │
+   └── Питания нет ──→ counter++
+        │
+        ├── counter < threshold ──→ сохранить counter ──→ выход
+        │
+        └── counter ≥ threshold ──→ Shutdown sequence
+              ├── Telegram: "Пропало питание"
+              ├── Executor: шаги из конфига (vm → ct → wait → all_vm → all_ct)
+              │   └── graceful shutdown, force stop если не ответил
+              └── Флаг /root/.powerfail_occurred
+```
+
+### При восстановлении питания
+
+Если `/root/.powerfail_occurred` существует:
+1. Telegram: «Питание вернулось, отключение было в HH:MM»
+2. Удалить все флаги
+
+— Выйти до следующего тика.

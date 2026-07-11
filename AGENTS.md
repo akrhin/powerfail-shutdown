@@ -55,7 +55,76 @@ formatters:
 5. **errcheck на `defer Close()`:** подавлять через `defer func() { _ = ...Close() }()`
 6. **errcheck на `os.Remove`:** подавлять через `_ = os.Remove(...)`
 
-## Как работать
+## Как это работает как сервис
+
+### Жизненный цикл
+
+Агент ставится как **systemd timer**, запускающий `Type=oneshot` service каждые 30 секунд:
+
+```
+$ systemctl list-timers --all | grep powerfail
+└─ powerfail-agent.timer ────────────────────��─────────────────┐
+   каждые 30с (OnCalendar=*-*-* *:*:0/30)                       │
+   │                                                             │
+   ▼ запускает                                                   │
+powerfail-agent.service                                          │
+  Type=oneshot                                                   │
+  ExecStart=/usr/local/bin/powerfail-agent run                   │
+                        ─── и выходит ───────────────────────────┘
+```
+
+### Каждый тик (30 секунд) происходит:
+
+```
+1. Detector — проверяет, есть ли питание
+   ├── PING: пинг ESP32-розетки (она перед ИБП, без 220 не пингуется)
+   └── HA: запрос к Home Assistant (сущности с приоритетами)
+
+2. Если питания нет:
+   ├── counter++ (/tmp/powerfail_counter)
+   ├── Порог не достигнут → просто сохранить counter, выйти
+   └── Порог достигнут → перейти к shutdown
+
+3. Shutdown sequence:
+   ├── Telegram: "Пропало питание, выключаюсь..."
+   ├── Executor: шаги из конфига (vm → ct → wait → all_vm → all_ct)
+   │   ├── graceful shutdown (qm shutdown, pct shutdown)
+   │   └── если не выключился → force stop (qm stop, pct stop)
+   ├── Создать флаг: /root/.powerfail_occurred (чтобы не повторять)
+   └── Создать флаг: /tmp/.powerfail_active (процесс shutdown идёт)
+
+4. Если питание ВЕРНУЛОСЬ + есть флаг /root/.powerfail_occurred:
+   ├── Telegram: "Питание вернулось, отключение было в HH:MM"
+   ├── Удалить /root/.powerfail_occurred
+   ├── Удалить /tmp/powerfail_counter
+   └── Удалить /tmp/.powerfail_active
+
+5. Если питание есть + нет флага: тихо выйти (ничего не делать)
+```
+
+### Флаг-файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `/tmp/powerfail_counter` | Счётчик последовательных неудачных проверок. Сбрасывается при любой успешной проверке. |
+| `/tmp/.powerfail_active` | Процесс shutdown уже начат — блокирует повторный shutdown до окончания или reboot. |
+| `/root/.powerfail_occurred` | Флаг «отключение уже было» — чтобы после восстановления отправить уведомление и сбросить счётчик. |
+
+### Логи
+
+```bash
+journalctl -u powerfail-agent.service -f    # последний запуск
+journalctl -u powerfail-agent.timer         # таймер
+```
+
+### Статус
+
+```bash
+systemctl status powerfail-agent.timer      # включён ли таймер
+cat /tmp/powerfail_counter                  # сколько раз подряд нет пинга
+cat /tmp/.powerfail_active                  # идёт ли shutdown
+cat /root/.powerfail_occurred               # было ли отключение
+```
 
 1. Сначала читай `ARCHITECTURE.md` — там описание компонентов
 2. Тестируй: `go vet ./... && go test ./... -count=1`
