@@ -93,7 +93,7 @@ func (n *Notifier) send(ctx context.Context, text string, parseMode string) erro
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("telegram returned %d", resp.StatusCode)
