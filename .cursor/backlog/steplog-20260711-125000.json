@@ -1,0 +1,4 @@
+{
+  "summary": "Созданы 4 обязательных файла проекта: ARCHITECTURE.md (архитектура), AGENTS.md (инструкции для агентов), .cursor/backlog/each-step-log.mdc (пер-турн лог), .cursor/backlog/significant-changes-summary.mdc (сводки по эпикам). CI полностью зелёный.",
+  "current_status": "Все 4 файла созданы, CI green. Готовим релиз."
+}
