@@ -1,0 +1,4 @@
+{
+  "summary": "Выполнена полная доводка проекта powerfail-shutdown: исправлены все errcheck/staticcheck/gosec ошибки, golangci-lint обновлён до v2, Go до 1.26.5, добавлены govulncheck + gitleaks в CI, создана документация (ARCHITECTURE.md, AGENTS.md, .cursor/backlog .mdc). Сделан первый релиз v1.0.0.",
+  "current_status": "CI зелёный на Go 1.26, golangci-lint v2.12.2, govulncheck advisory, gitleaks 0 leaks. Релиз v1.0.0 создан."
+}
