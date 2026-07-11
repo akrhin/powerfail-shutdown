@@ -1,3 +1,5 @@
+version: "2"
+
 linters-settings:
   errcheck:
     check-type-assertions: false
@@ -11,6 +13,7 @@ linters-settings:
       - G306  # WriteFile permissions — systemd units need 0644, flag files too
       - G101  # Hardcoded credentials — example config only
 linters:
+  default: none
   enable:
     - errcheck
     - gosimple
