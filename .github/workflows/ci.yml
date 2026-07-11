@@ -95,16 +95,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
+          name: powerfail-agent
+          path: release/
+
+      - name: Prepare release assets
+        run: |
+          chmod +x release/powerfail-agent-linux-*
+          cp deploy/install.sh release/
+          cp powerfail.toml.example release/
+          # Also pack a tar.gz for manual download
+          cd release
+          tar czf powerfail-agent-linux-amd64.tar.gz \
+            powerfail-agent-linux-amd64 install.sh powerfail.toml.example
+          tar czf powerfail-agent-linux-arm64.tar.gz \
+            powerfail-agent-linux-arm64 install.sh powerfail.toml.example
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
         with:
-          go-version: "1.26.5"
-          cache: true
-      - name: GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: release/*
+          generate_release_notes: true

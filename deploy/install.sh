@@ -34,35 +34,26 @@ fi
 
 echo "Downloading powerfail-agent $LATEST ($GOARCH)..."
 if [[ "$LATEST" == "main" ]]; then
-  # No release yet — use raw GitHub
   URL="https://raw.githubusercontent.com/$REPO/main/bin/powerfail-agent-linux-$GOARCH"
-  curl -sL --connect-timeout 15 --max-time 60 -o "$BIN_DIR/powerfail-agent" "$URL"
 else
-  ARCHIVE_URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-shutdown_${LATEST#v}_Linux_x86_64.tar.gz"
-  if [[ "$GOARCH" == "arm64" ]]; then
-    ARCHIVE_URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-shutdown_${LATEST#v}_Linux_arm64.tar.gz"
-  fi
-  curl -sL --connect-timeout 15 --max-time 60 -o /tmp/powerfail-agent.tar.gz "$ARCHIVE_URL"
-  tar xzf /tmp/powerfail-agent.tar.gz -C "$BIN_DIR" powerfail-agent
-  rm -f /tmp/powerfail-agent.tar.gz
+  URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-agent-linux-$GOARCH"
 fi
+curl -sL --connect-timeout 15 --max-time 60 -o "$BIN_DIR/powerfail-agent" "$URL"
 chmod +x "$BIN_DIR/powerfail-agent"
 ok "$BIN_DIR/powerfail-agent ($LATEST)"
 
 # Create config directory
 mkdir -p "$CONFIG_DIR"
 if [[ ! -f "$CONFIG_DIR/powerfail.conf" ]]; then
-  curl -sL --connect-timeout 10 \
-    "https://github.com/$REPO/releases/download/$LATEST/powerfail.toml.example" \
-    -o "$CONFIG_DIR/powerfail.conf" 2>/dev/null || true
+  if [[ "$LATEST" == "main" ]]; then
+    CONFIG_URL="https://raw.githubusercontent.com/$REPO/main/powerfail.toml.example"
+  else
+    CONFIG_URL="https://github.com/$REPO/releases/download/$LATEST/powerfail.toml.example"
+  fi
+  curl -sL --connect-timeout 10 "$CONFIG_URL" -o "$CONFIG_DIR/powerfail.conf" 2>/dev/null || true
   chmod 600 "$CONFIG_DIR/powerfail.conf" 2>/dev/null
   ok "$CONFIG_DIR/powerfail.conf created — edit and fill in your settings"
 fi
-
-# Download deploy files
-TMP_DIR=$(mktemp -d)
-curl -sL "https://github.com/$REPO/releases/download/$LATEST/install.sh" \
-  -o "$TMP_DIR/install.sh" 2>/dev/null || true
 
 # Install systemd units
 echo ""
@@ -95,8 +86,6 @@ systemctl daemon-reload
 systemctl enable powerfail-agent.timer 2>/dev/null
 systemctl start powerfail-agent.timer 2>/dev/null
 ok "systemd timer installed and running"
-
-rm -rf "$TMP_DIR"
 
 echo ""
 echo "============================================"
