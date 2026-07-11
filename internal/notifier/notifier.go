@@ -63,10 +63,10 @@ func (n *Notifier) SendPlain(ctx context.Context, text string) error {
 }
 
 type tgPayload struct {
-	ChatID              int64  `json:"chat_id"`
-	Text                string `json:"text"`
-	ParseMode           string `json:"parse_mode,omitempty"`
-	DisableWebPagePreview bool `json:"disable_web_page_preview"`
+	ChatID                int64  `json:"chat_id"`
+	Text                  string `json:"text"`
+	ParseMode             string `json:"parse_mode,omitempty"`
+	DisableWebPagePreview bool   `json:"disable_web_page_preview"`
 }
 
 func (n *Notifier) send(ctx context.Context, text string, parseMode string) error {

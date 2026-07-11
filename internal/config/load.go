@@ -27,9 +27,9 @@ func DefaultConfig() *models.Config {
 			Entity: nil,
 		},
 		Shutdown: models.ShutdownConfig{
-			TimeoutSecs:     600,
+			TimeoutSecs:       600,
 			PoweroffDelaySecs: 30,
-			Sequence:      nil,
+			Sequence:          nil,
 		},
 		Telegram: nil,
 	}

@@ -8,6 +8,7 @@ linters-settings:
       - G304  # File path provided as taint input — config file path is trusted
       - G301  # Directory permissions — /etc/powerfail, fine
       - G302  # File permissions — flag files, fine
+      - G306  # WriteFile permissions — systemd units need 0644, flag files too
       - G101  # Hardcoded credentials — example config only
 linters:
   enable:

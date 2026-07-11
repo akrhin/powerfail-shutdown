@@ -1,12 +1,13 @@
 // Command agent runs the powerfail shutdown monitor.
 //
 // Usage:
-//   powerfail-agent run                    — one check cycle (systemd timer)
-//   powerfail-agent run --config /etc/powerfail/powerfail.conf
-//   powerfail-agent test-network           — test ping/HA connectivity
-//   powerfail-agent test-telegram          — send a test message
-//   powerfail-agent dry-run                — simulate shutdown sequence
-//   powerfail-agent install                — install systemd unit + timer
+//
+//	powerfail-agent run                    — one check cycle (systemd timer)
+//	powerfail-agent run --config /etc/powerfail/powerfail.conf
+//	powerfail-agent test-network           — test ping/HA connectivity
+//	powerfail-agent test-telegram          — send a test message
+//	powerfail-agent dry-run                — simulate shutdown sequence
+//	powerfail-agent install                — install systemd unit + timer
 package main
 
 import (

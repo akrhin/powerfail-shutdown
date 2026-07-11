@@ -24,9 +24,9 @@ type PingConfig struct {
 
 // HAConfig defines Home Assistant connection and entities.
 type HAConfig struct {
-	URL    string      `toml:"url"    comment:"HA API base URL"`
-	Token  string      `toml:"token"  comment:"HA long-lived access token"`
-	Entity []HAEntity  `toml:"entity" comment:"entities to monitor, first is primary"`
+	URL    string     `toml:"url"    comment:"HA API base URL"`
+	Token  string     `toml:"token"  comment:"HA long-lived access token"`
+	Entity []HAEntity `toml:"entity" comment:"entities to monitor, first is primary"`
 }
 
 // HAEntity represents a single HA entity to monitor.
@@ -37,9 +37,9 @@ type HAEntity struct {
 
 // ShutdownConfig controls the shutdown sequence.
 type ShutdownConfig struct {
-	TimeoutSecs     int    `toml:"timeout_secs"        comment:"max wait for VM shutdown (seconds)"`
-	PoweroffDelaySecs int  `toml:"poweroff_delay_secs"  comment:"delay before poweroff (seconds)"`
-	Sequence        []Step `toml:"step"                 comment:"ordered shutdown steps"`
+	TimeoutSecs       int    `toml:"timeout_secs"        comment:"max wait for VM shutdown (seconds)"`
+	PoweroffDelaySecs int    `toml:"poweroff_delay_secs"  comment:"delay before poweroff (seconds)"`
+	Sequence          []Step `toml:"step"                 comment:"ordered shutdown steps"`
 }
 
 // Step is a single shutdown step.
