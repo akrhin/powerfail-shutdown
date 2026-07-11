@@ -28,6 +28,11 @@ archives:
       - powerfail.toml.example
       - deploy/*
 
+# Standalone binaries for curl-based install
+universal_binaries:
+  - ids: [powerfail-agent]
+    replace: true
+
 checksum:
   name_template: 'checksums.txt'
 
@@ -48,3 +53,6 @@ release:
   github:
     owner: akrhin
     name: powerfail-shutdown
+  extra_files:
+    - glob: deploy/install.sh
+    - glob: powerfail.toml.example

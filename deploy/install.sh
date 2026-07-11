@@ -30,13 +30,22 @@ LATEST=$(curl -sL --connect-timeout 10 "https://api.github.com/repos/$REPO/relea
 if [[ -z "$LATEST" ]]; then
   warn "Could not detect latest release, using main branch binary"
   LATEST="main"
-  URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-agent-linux-$GOARCH"
-else
-  URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-agent-linux-$GOARCH"
 fi
 
 echo "Downloading powerfail-agent $LATEST ($GOARCH)..."
-curl -sL --connect-timeout 15 --max-time 60 -o "$BIN_DIR/powerfail-agent" "$URL"
+if [[ "$LATEST" == "main" ]]; then
+  # No release yet — use raw GitHub
+  URL="https://raw.githubusercontent.com/$REPO/main/bin/powerfail-agent-linux-$GOARCH"
+  curl -sL --connect-timeout 15 --max-time 60 -o "$BIN_DIR/powerfail-agent" "$URL"
+else
+  ARCHIVE_URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-shutdown_${LATEST#v}_Linux_x86_64.tar.gz"
+  if [[ "$GOARCH" == "arm64" ]]; then
+    ARCHIVE_URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-shutdown_${LATEST#v}_Linux_arm64.tar.gz"
+  fi
+  curl -sL --connect-timeout 15 --max-time 60 -o /tmp/powerfail-agent.tar.gz "$ARCHIVE_URL"
+  tar xzf /tmp/powerfail-agent.tar.gz -C "$BIN_DIR" powerfail-agent
+  rm -f /tmp/powerfail-agent.tar.gz
+fi
 chmod +x "$BIN_DIR/powerfail-agent"
 ok "$BIN_DIR/powerfail-agent ($LATEST)"
 
