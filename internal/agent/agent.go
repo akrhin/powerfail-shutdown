@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/akrhin/powerfail-shutdown/internal/config"
@@ -16,9 +17,10 @@ import (
 )
 
 const (
-	flagOccurred  = "/root/.powerfail_occurred"
-	counterFile   = "/tmp/powerfail_counter"
-	powerfailFile = "/tmp/.powerfail_active"
+	flagOccurred    = "/root/.powerfail_occurred"
+	counterFile     = "/tmp/powerfail_counter"
+	powerfailFile   = "/tmp/.powerfail_active"
+	maintenanceFile = "/tmp/.powerfail_maintenance"
 )
 
 // Run executes one full check cycle.
@@ -32,6 +34,17 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 	notif := notifier.New(cfg.Telegram)
 	det := detector.New(cfg)
 	exec := executor.New(&cfg.Shutdown)
+
+	// Phase -1: Maintenance mode check
+	if data, err := os.ReadFile(maintenanceFile); err == nil {
+		until, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
+		if parseErr == nil && time.Now().Before(until) {
+			_ = os.WriteFile(counterFile, []byte("0"), 0644) // reset counter
+			return fmt.Sprintf("MAINTENANCE — skipping check (active until %s)", until.Format("15:04")), nil
+		}
+		_ = os.Remove(maintenanceFile) // expired — clean up
+		log.Println("Maintenance mode expired, removed flag")
+	}
 
 	// Phase 0: Post-recovery notification
 	if _, err := os.Stat(flagOccurred); err == nil {

@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,9 @@ func main() {
 	case "install":
 		install()
 
+	case "maintenance":
+		maintenanceCmd(args)
+
 	default:
 		fmt.Fprintf(os.Stderr, "Usage: powerfail-agent [--config path] <command>\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
@@ -66,6 +70,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  test-network     Test ping/HA configuration\n")
 		fmt.Fprintf(os.Stderr, "  test-telegram    Send a test Telegram message\n")
 		fmt.Fprintf(os.Stderr, "  dry-run          Simulate without shutting down\n")
+		fmt.Fprintf(os.Stderr, "  maintenance [N]  Enable/disable/status maintenance mode (N = minutes, 0 = off)\n")
 		fmt.Fprintf(os.Stderr, "  install          Install systemd timer + service\n")
 		os.Exit(1)
 	}
@@ -157,6 +162,44 @@ func dryRun(path string) {
 	}
 	log.Println(msg)
 	log.Println("⚠️  DRY RUN COMPLETE — no changes applied")
+}
+
+func maintenanceCmd(args []string) {
+	const maintenanceFile = "/tmp/.powerfail_maintenance"
+
+	if len(args) > 1 && args[1] == "0" {
+		_ = os.Remove(maintenanceFile)
+		fmt.Println("✅ Maintenance mode disabled.")
+		return
+	}
+
+	if len(args) > 1 {
+		minutes, err := strconv.Atoi(args[1])
+		if err != nil || minutes < 1 || minutes > 120 {
+			log.Fatalf("Invalid duration %q — use 1–120 minutes", args[1])
+		}
+
+		until := time.Now().Add(time.Duration(minutes) * time.Minute)
+		if err := os.WriteFile(maintenanceFile, []byte(until.Format(time.RFC3339)), 0644); err != nil {
+			log.Fatalf("Write maintenance flag: %v", err)
+		}
+		fmt.Printf("✅ Maintenance mode enabled for %d min — active until %s\n", minutes, until.Format("15:04"))
+		return
+	}
+
+	// Show status
+	data, err := os.ReadFile(maintenanceFile)
+	if err != nil {
+		fmt.Println("ℹ️  Maintenance mode is OFF.")
+		return
+	}
+	until, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
+	if parseErr != nil || time.Now().After(until) {
+		fmt.Println("ℹ️  Maintenance mode expired. Run `powerfail-agent maintenance 0` to clean up.")
+		return
+	}
+	fmt.Printf("ℹ️  Maintenance mode ON — active until %s (%s remaining)\n",
+		until.Format("15:04"), time.Until(until).Round(time.Second))
 }
 
 func install() {
