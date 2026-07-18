@@ -69,7 +69,7 @@ lint → vulncheck → secrets-scan → test
 - `golangci-lint` v2.12.2 (gosec, errcheck, staticcheck, govet)
 - `govulncheck` — сканирование уязвимостей
 - `gitleaks` — проверка утечки секретов
-- `goreleaser` — рели�� на теги
+- `softprops/action-gh-release` — релиз на теги
 
 ## Security
 
