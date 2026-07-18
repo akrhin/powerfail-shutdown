@@ -39,7 +39,7 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 	if data, err := os.ReadFile(maintenanceFile); err == nil {
 		until, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
 		if parseErr == nil && time.Now().Before(until) {
-			_ = os.WriteFile(counterFile, []byte("0"), 0644) // reset counter
+			_ = os.WriteFile(counterFile, []byte("0"), 0600) // reset counter
 			return fmt.Sprintf("MAINTENANCE — skipping check (active until %s)", until.Format("15:04")), nil
 		}
 		_ = os.Remove(maintenanceFile) // expired — clean up
@@ -78,7 +78,7 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 
 	// If everything OK — reset counter and exit
 	if !result.Suspicion {
-		if err := os.WriteFile(counterFile, []byte("0"), 0644); err != nil {
+		if err := os.WriteFile(counterFile, []byte("0"), 0600); err != nil {
 			log.Printf("WARN: write counter: %v", err)
 		}
 		return "OK — " + result.Reason, nil
@@ -92,7 +92,7 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 		}
 	}
 	counter++
-	if err := os.WriteFile(counterFile, []byte(fmt.Sprintf("%d", counter)), 0644); err != nil {
+	if err := os.WriteFile(counterFile, []byte(fmt.Sprintf("%d", counter)), 0600); err != nil {
 		log.Printf("WARN: write counter: %v", err)
 	}
 
@@ -100,10 +100,10 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 
 	// If threshold reached OR confirmation signal triggered
 	if counter >= cfg.Detection.Threshold || result.Confirmation {
-		if err := os.WriteFile(flagOccurred, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
+		if err := os.WriteFile(flagOccurred, []byte(time.Now().Format(time.RFC3339)), 0600); err != nil {
 			return "", fmt.Errorf("write flag: %w", err)
 		}
-		if err := os.WriteFile(powerfailFile, []byte("1"), 0644); err != nil {
+		if err := os.WriteFile(powerfailFile, []byte("1"), 0600); err != nil {
 			return "", fmt.Errorf("write powerfail flag: %w", err)
 		}
 

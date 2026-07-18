@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 	"github.com/akrhin/powerfail-shutdown/internal/models"
@@ -37,6 +38,7 @@ func DefaultConfig() *models.Config {
 
 // LoadFile reads a TOML file and decodes it into a Config.
 func LoadFile(path string) (*models.Config, error) {
+	path = filepath.Clean(path)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)

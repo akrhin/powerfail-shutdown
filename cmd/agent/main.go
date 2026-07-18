@@ -180,7 +180,7 @@ func maintenanceCmd(args []string) {
 		}
 
 		until := time.Now().Add(time.Duration(minutes) * time.Minute)
-		if err := os.WriteFile(maintenanceFile, []byte(until.Format(time.RFC3339)), 0644); err != nil {
+		if err := os.WriteFile(maintenanceFile, []byte(until.Format(time.RFC3339)), 0600); err != nil {
 			log.Fatalf("Write maintenance flag: %v", err)
 		}
 		fmt.Printf("✅ Maintenance mode enabled for %d min — active until %s\n", minutes, until.Format("15:04"))
@@ -208,7 +208,7 @@ func install() {
 		log.Fatal("install must be run as root")
 	}
 	// Create config directory
-	if err := os.MkdirAll("/etc/powerfail", 0755); err != nil {
+	if err := os.MkdirAll("/etc/powerfail", 0750); err != nil {
 		log.Fatalf("create config dir: %v", err)
 	}
 
