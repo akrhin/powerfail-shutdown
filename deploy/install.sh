@@ -34,7 +34,9 @@ fi
 
 echo "Downloading powerfail-agent $LATEST ($GOARCH)..."
 if [[ "$LATEST" == "main" ]]; then
-  URL="https://raw.githubusercontent.com/$REPO/main/bin/powerfail-agent-linux-$GOARCH"
+  echo "⚠️  Fallback to main branch — no binaries in git, install may fail"
+  warn "Binaries are not committed to git. Install from a tagged release instead."
+  URL="https://github.com/$REPO/releases/latest/download/powerfail-agent-linux-$GOARCH"
 else
   URL="https://github.com/$REPO/releases/download/$LATEST/powerfail-agent-linux-$GOARCH"
 fi
