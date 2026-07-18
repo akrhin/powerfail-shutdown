@@ -98,6 +98,21 @@ type = "all_ct"      # force-stop остальных CT
 | `powerfail-agent test-network` | Проверить ping/HA/VM |
 | `powerfail-agent test-telegram` | Отправить тестовое сообщение |
 | `powerfail-agent dry-run` | Симуляция без выключения |
+| `powerfail-agent maintenance N` | Отключить проверки на N минут (0 = выкл) |
+| `powerfail-agent maintenance` | Показать статус maintenance |
+| `powerfail-agent install` | Установить systemd-сервис + таймер |
+
+## Maintenance mode
+
+Для отключения детекции на время работ:
+
+```bash
+powerfail-agent maintenance 60    # отключить на 60 мин
+powerfail-agent maintenance       # проверить статус
+powerfail-agent maintenance 0     # отключить maintenance
+```
+
+Создаёт флаг `/tmp/.powerfail_maintenance` со временем окончания. При старте агент сбрасывает счётчик и выходит без проверок.
 
 ## Сборка из исходников
 

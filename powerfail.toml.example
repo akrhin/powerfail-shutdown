@@ -22,7 +22,7 @@ secondary = "192.168.1.1"
 [ha]
 # Home Assistant API
 url = "http://192.168.1.100:8123"
-token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+token = "YOUR_HA_TOKEN"
 
 # Первая сущность с priority=1 = primary (подозрение)
 # Остальные с priority>=2 = secondary (подтверждение)
