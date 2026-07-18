@@ -30,7 +30,7 @@ make test               # go test -v -cover
 | Secrets | gitleaks | 0 leaks |
 | Test | go test -v -cover -race | exit 0 |
 | Build | make build-all | exit 0 |
-| Release | goreleaser (только теги v*) | — |
+| Release | softprops/action-gh-release (только теги v*) | — |
 
 ## Конфигурация golangci-lint (v2)
 

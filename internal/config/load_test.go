@@ -179,7 +179,7 @@ mode = "any"
 threshold = 3
 
 [ping]
-main = "192.168.1.100"
+main = "192.168.1.200"
 secondary = "192.168.1.1"
 
 [ha]
