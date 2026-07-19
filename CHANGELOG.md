@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.5.0 (2026-07-19)
+
+### Security
+- **Git history scrub** — удалены реальные IP, HA token, chat_id из 50 коммитов (git-filter-repo)
+- **LICENSE**: MIT с AI disclaimer
+
+### Code Quality
+- **Makefile**: `make verify` + `make verify-commands`, test с `-race`
+- **Total tests**: 9 во всех 7 пакетах
+
+### Documentation
+- **README**: добавлены секции «Безопасность» и «Лицензия и отказ от ответственности»
+
 ## v1.4.0 (2026-07-18)
 
 ### Security
