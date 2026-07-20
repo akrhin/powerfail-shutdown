@@ -51,7 +51,7 @@ formatters:
 1. **`golangci-lint` v1 → v2:** `gosimple` влит в `staticcheck`, `gofmt` отделён в `formatters`, `linters-settings` → `linters.settings`, требуется `version: "2"` + `linters.default: none`
 2. **Go 1.24+ and golangci-lint:** v1.64.8 собран с Go 1.24 и НЕ может линтить код на 1.25+. Используйте v2.x линтера
 3. **govulncheck всегда находит CVE в stdlib:** это нормально, делает `|| true` в CI если блокирует пайплайн
-4. **Go 1.26.4 → GO-2026-5856:** crypt/tls ECH privacy leak. Фиксится в 1.26.5. Пинать версию в `setup-go`
+4. **Go 1.26.5 → GO-2026-5856:** crypt/tls ECH privacy leak. Фиксится в 1.26.5 ✅ — CI уже на 1.26.5.
 5. **errcheck на `defer Close()`:** подавлять через `defer func() { _ = ...Close() }()`
 6. **errcheck на `os.Remove`:** подавлять через `_ = os.Remove(...)`
 

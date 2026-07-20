@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	osexec "os/exec"
 	"strings"
 	"time"
 
@@ -131,6 +131,16 @@ func Run(ctx context.Context, cfgPath string) (string, error) {
 			}
 		}
 
+		// Poweroff host after delay
+		delay := time.Duration(cfg.Shutdown.PoweroffDelaySecs) * time.Second
+		if delay > 0 {
+			log.Printf("Poweroff in %v...", delay)
+			time.Sleep(delay)
+		}
+		if err := osexec.Command("systemctl", "poweroff").Run(); err != nil {
+			return "", fmt.Errorf("poweroff: %w", err)
+		}
+
 		return "SHUTDOWN SEQUENCE COMPLETE", nil
 	}
 
@@ -141,5 +151,5 @@ func pingRouter(ctx context.Context, host string) bool {
 	if host == "" {
 		return false
 	}
-	return exec.CommandContext(ctx, "ping", "-c", "1", "-W", "2", host).Run() == nil
+	return osexec.CommandContext(ctx, "ping", "-c", "1", "-W", "2", host).Run() == nil
 }

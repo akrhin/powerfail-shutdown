@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -41,7 +42,8 @@ func proxyFromConfig(proxy string) func(*http.Request) (*url.URL, error) {
 	}
 	proxyURL, err := url.Parse(proxy)
 	if err != nil {
-		return nil // invalid proxy URL, fallback to direct
+		log.Printf("WARN: invalid proxy URL %q — falling back to direct connection: %v", proxy, err)
+		return nil
 	}
 	return http.ProxyURL(proxyURL)
 }

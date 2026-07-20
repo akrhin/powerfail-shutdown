@@ -79,12 +79,12 @@ func stopVM(ctx context.Context, vmid int, timeout time.Duration) error {
 	return exec.CommandContext(ctx, "qm", "stop", fmt.Sprintf("%d", vmid)).Run()
 }
 
-func stopCT(ctx context.Context, ctid int, _ time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func stopCT(ctx context.Context, ctid int, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Try graceful shutdown first
-	cmd := exec.CommandContext(ctx, "pct", "shutdown", fmt.Sprintf("%d", ctid), "--timeout", "30")
+	cmd := exec.CommandContext(ctx, "pct", "shutdown", fmt.Sprintf("%d", ctid), "--timeout", fmt.Sprintf("%d", int(timeout.Seconds())))
 	if err := cmd.Run(); err == nil {
 		return nil
 	}

@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.6.0 (2026-07-20)
+
+### Bugfixes
+- **P0** — `internal/agent/agent.go`: shutdown sequence не вызывал `systemctl poweroff` — агент писал сообщение и выходил без отключения хоста. Добавлен реальный вызов.
+- **P0** — `internal/executor/executor.go`: `stopCT()` игнорировал переданный `timeout`, использовал хардкод 30 секунд. Теперь использует timeout из конфига.
+- **P0** — `internal/detector/detector.go`: `detectAll()` использовал `pingHost()` вместо `d.pingFn()` — подмена для тестов не работала.
+- **P0** — `internal/detector/detector.go`: `allHAOff = true` при пустом списке HA-сущностей — ложное срабатывание в режиме `all`. Исправлено: `allHAOff = len(cfg.HA.Entity) > 0`.
+- **P1** — `internal/notifier/notifier.go`: невалидный proxy URL молча игнорировался. Добавлен `log.Printf` с предупреждением.
+
+### Testing
+- **Новые тесты**: detector (22 тестов, 4 режима), executor (12 тестов, 2 парсера), notifier (httptest.Server), agent (интеграционные с tempfs)
+- **Total**: 9 → 73 тестов в 7 пакетах
+- **Coverage**: все 4 режима детекции (ping, ha, any, all), parseQMRunning/PCTRunning, контекстная отмена, ошибки конфига
+
+### Documentation
+- **ARCHITECTURE.md**: добавлен poweroff delay + systemctl poweroff в диаграмму
+- **AGENTS.md**: Go 1.26.4 → 1.26.5 (CI уже на 1.26.5)
+
 ## v1.5.0 (2026-07-19)
 
 ### Security

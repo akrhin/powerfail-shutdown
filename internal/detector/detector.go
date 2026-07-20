@@ -20,16 +20,27 @@ type Result struct {
 	Reason       string // human-readable description
 }
 
+// PingFn is a function that checks if a host responds to ping.
+// Defaults to pingHost; can be overridden for testing.
+type PingFn func(ctx context.Context, host string) bool
+
 // Detector checks power status based on configured sources.
 type Detector struct {
 	cfg        *models.Config
 	httpClient *http.Client
+	pingFn     PingFn
 }
 
 // New creates a Detector from config.
 func New(cfg *models.Config) *Detector {
+	return NewWithPingFn(cfg, pingHost)
+}
+
+// NewWithPingFn creates a Detector with a custom ping function (for testing).
+func NewWithPingFn(cfg *models.Config, fn PingFn) *Detector {
 	return &Detector{
-		cfg: cfg,
+		cfg:    cfg,
+		pingFn: fn,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -54,7 +65,7 @@ func (d *Detector) Detect(ctx context.Context) (*Result, error) {
 
 // detectPing uses ping only. Main = suspicion, Secondary = confirmation.
 func (d *Detector) detectPing(ctx context.Context) (*Result, error) {
-	mainOK := pingHost(ctx, d.cfg.Ping.Main)
+	mainOK := d.pingFn(ctx, d.cfg.Ping.Main)
 	reason := fmt.Sprintf("ping main=%s ok=%v", d.cfg.Ping.Main, mainOK)
 
 	if mainOK {
@@ -64,7 +75,7 @@ func (d *Detector) detectPing(ctx context.Context) (*Result, error) {
 	res := &Result{Suspicion: true, Reason: reason}
 
 	if d.cfg.Ping.Secondary != "" {
-		secOK := pingHost(ctx, d.cfg.Ping.Secondary)
+		secOK := d.pingFn(ctx, d.cfg.Ping.Secondary)
 		res.Confirmation = !secOK
 		res.Reason += fmt.Sprintf(", secondary=%s ok=%v", d.cfg.Ping.Secondary, secOK)
 	}
@@ -110,10 +121,10 @@ func (d *Detector) detectHA(ctx context.Context) (*Result, error) {
 func (d *Detector) detectAny(ctx context.Context) (*Result, error) {
 	res := &Result{}
 
-	pingMain := pingHost(ctx, d.cfg.Ping.Main)
+	pingMain := d.pingFn(ctx, d.cfg.Ping.Main)
 	pingSec := d.cfg.Ping.Secondary == "" // empty = treat as up (skip)
 	if d.cfg.Ping.Secondary != "" {
-		pingSec = pingHost(ctx, d.cfg.Ping.Secondary)
+		pingSec = d.pingFn(ctx, d.cfg.Ping.Secondary)
 	}
 
 	haStates := make(map[string]string)
@@ -157,16 +168,20 @@ func (d *Detector) detectAny(ctx context.Context) (*Result, error) {
 func (d *Detector) detectAll(ctx context.Context) (*Result, error) {
 	res := &Result{}
 
-	pingMain := pingHost(ctx, d.cfg.Ping.Main)
-	pingSec := d.cfg.Ping.Secondary == "" // empty = treat as up (skip)
+	pingMain := d.pingFn(ctx, d.cfg.Ping.Main)
+	// When secondary is empty, it doesn't affect the AND
+	pingSec := true
 	if d.cfg.Ping.Secondary != "" {
-		pingSec = pingHost(ctx, d.cfg.Ping.Secondary)
+		pingSec = d.pingFn(ctx, d.cfg.Ping.Secondary)
 	}
 
-	// Only proceed if ping sensors agree
-	allPingDown := !pingMain && !pingSec
+	// Only consider configured ping targets
+	allPingDown := !pingMain
+	if d.cfg.Ping.Secondary != "" {
+		allPingDown = allPingDown && !pingSec
+	}
 
-	var allHAOff = true
+	var allHAOff = len(d.cfg.HA.Entity) > 0 // если нет сущностей — не считать «всё отключено»
 	var anyHAOff = false
 	for _, ent := range d.cfg.HA.Entity {
 		s, err := d.getHAState(ctx, ent.EntityID)

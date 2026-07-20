@@ -102,6 +102,8 @@ Detector (ping / HA)
               ├── Executor: шаги из конфига (vm → ct → wait → all_vm → all_ct)
               │   └── graceful shutdown, force stop если не ответил
               └── Флаг /root/.powerfail_occurred
+              │
+              └── Sleep(poweroff_delay_secs) → systemctl poweroff
 ```
 
 ### При восстановлении питания
